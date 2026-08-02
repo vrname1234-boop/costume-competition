@@ -33,7 +33,14 @@ const schema = z.object({
   LOG_LEVEL: z.string().default('info'),
 });
 
-const parsed = schema.safeParse(process.env);
+// An empty value in a .env file means "not configured", not "configured as
+// an empty string" — otherwise commenting out a key by blanking it fails
+// validation instead of falling back to the development defaults.
+const provided = Object.fromEntries(
+  Object.entries(process.env).filter(([, value]) => value !== undefined && value.trim() !== ''),
+);
+
+const parsed = schema.safeParse(provided);
 
 if (!parsed.success) {
   const issues = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');

@@ -20,12 +20,14 @@ export function Register() {
   const [confirm, setConfirm] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   const requestCode = (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setFieldErrors({});
     void api
       .post<{ message: string }>('/api/auth/student/register', {
         email: email.trim().toLowerCase(),
@@ -36,7 +38,13 @@ export function Register() {
         setStep('verify');
       })
       .catch((err: unknown) => {
-        setError(err instanceof ApiError ? err.message : 'Could not send the code. Try again.');
+        if (err instanceof ApiError) {
+          setFieldErrors(err.fieldErrors);
+          // A field-level message is far more useful than "check the fields".
+          setError(Object.values(err.fieldErrors)[0] ?? err.message);
+        } else {
+          setError('Could not send the code. Try again.');
+        }
       })
       .finally(() => setBusy(false));
   };
@@ -78,7 +86,7 @@ export function Register() {
 
         {step === 'details' ? (
           <form onSubmit={requestCode} noValidate>
-            <Field label="Your full name" htmlFor="name">
+            <Field label="Your full name" htmlFor="name" error={fieldErrors.displayName}>
               <input
                 id="name"
                 type="text"
@@ -93,6 +101,7 @@ export function Register() {
               label="School email"
               htmlFor="email"
               hint="For example: student.name123@education.nsw.gov.au"
+              error={fieldErrors.email}
             >
               <input
                 id="email"

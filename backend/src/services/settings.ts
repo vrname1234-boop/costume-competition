@@ -58,6 +58,9 @@ export const windowMessage = (w: SubmissionWindow): string => {
  */
 export function isCompetitionLocked(settings: CompetitionSettingsRow, now = new Date()): boolean {
   if (settings.locked) return true;
+  // Pausing submissions is the escape hatch: nobody can enter while paused, so
+  // the rules are free to change again.
+  if (!settings.submissions_enabled) return false;
   return Boolean(settings.submission_opens_at && now >= settings.submission_opens_at);
 }
 

@@ -67,23 +67,25 @@ export function OwnerCompetition() {
 
   const isFieldLocked = (field: string) => locked && lockedFields.includes(field);
 
-  const saveSettings = () =>
-    run(
-      () =>
-        api.put('/api/owner/competition-settings', {
-          competition_name: settings.competition_name,
-          submission_opens_at: settings.submission_opens_at,
-          submission_closes_at: settings.submission_closes_at,
-          submissions_enabled: settings.submissions_enabled,
-          number_of_winners: settings.number_of_winners,
-          prize_info: settings.prize_info,
-          judging_method: settings.judging_method,
-          requirements: settings.requirements,
-          max_file_size_mb: settings.max_file_size_mb,
-          allowed_file_types: settings.allowed_file_types,
-        }),
-      'Competition settings saved.',
-    );
+  const saveSettings = () => {
+    const payload: Record<string, unknown> = {
+      submissions_enabled: settings.submissions_enabled,
+      prize_info: settings.prize_info,
+      judging_method: settings.judging_method,
+      max_file_size_mb: settings.max_file_size_mb,
+      allowed_file_types: settings.allowed_file_types,
+      competition_name: settings.competition_name,
+      submission_opens_at: settings.submission_opens_at,
+      submission_closes_at: settings.submission_closes_at,
+      number_of_winners: settings.number_of_winners,
+      requirements: settings.requirements,
+    };
+    // Locked fields are disabled in the form, so sending them back would only
+    // ever be a no-op the server has to reject. Pausing must stay reachable.
+    for (const field of lockedFields) if (locked) delete payload[field];
+
+    return run(() => api.put('/api/owner/competition-settings', payload), 'Competition settings saved.');
+  };
 
   return (
     <>

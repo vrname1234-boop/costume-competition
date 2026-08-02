@@ -382,6 +382,19 @@ const settingsSchema = z.object({
   locked: z.boolean().optional(),
 });
 
+/**
+ * Compares an incoming JSON value with the stored one. Dates arrive as ISO
+ * strings but come back from Postgres as Date objects, so a naive comparison
+ * reports every resend of an unchanged date as an attempted change.
+ */
+function sameValue(incoming: unknown, stored: unknown): boolean {
+  if (stored instanceof Date) {
+    return typeof incoming === 'string' && new Date(incoming).getTime() === stored.getTime();
+  }
+  if (incoming === null || stored === null) return incoming === stored;
+  return String(incoming) === String(stored);
+}
+
 ownerRouter.get(
   '/competition-settings',
   asyncHandler(async (_req, res) => {
@@ -402,7 +415,7 @@ ownerRouter.put(
 
     if (isCompetitionLocked(before)) {
       const attempted = LOCKED_SETTING_FIELDS.filter(
-        (field) => body[field] !== undefined && String(body[field]) !== String(before[field]),
+        (field) => field in body && !sameValue(body[field], before[field]),
       );
       if (attempted.length) {
         throw forbidden(
@@ -411,17 +424,22 @@ ownerRouter.put(
       }
     }
 
-    if (body.submission_opens_at && body.submission_closes_at) {
-      if (new Date(body.submission_closes_at) <= new Date(body.submission_opens_at)) {
-        throw badRequest('The closing date must be after the opening date.');
-      }
+    // A date can be cleared by sending null, so "absent" and "null" must stay
+    // distinguishable all the way into the UPDATE.
+    const setsOpens = 'submission_opens_at' in body;
+    const setsCloses = 'submission_closes_at' in body;
+    const opensAt = setsOpens ? (body.submission_opens_at ?? null) : before.submission_opens_at;
+    const closesAt = setsCloses ? (body.submission_closes_at ?? null) : before.submission_closes_at;
+
+    if (opensAt && closesAt && new Date(closesAt) <= new Date(opensAt)) {
+      throw badRequest('The closing date must be after the opening date.');
     }
 
     const updated = await queryOne(
       `UPDATE competition_settings SET
          competition_name     = COALESCE($1, competition_name),
-         submission_opens_at  = COALESCE($2::timestamptz, submission_opens_at),
-         submission_closes_at = COALESCE($3::timestamptz, submission_closes_at),
+         submission_opens_at  = CASE WHEN $13 THEN $2::timestamptz ELSE submission_opens_at END,
+         submission_closes_at = CASE WHEN $14 THEN $3::timestamptz ELSE submission_closes_at END,
          submissions_enabled  = COALESCE($4, submissions_enabled),
          number_of_winners    = COALESCE($5, number_of_winners),
          prize_info           = COALESCE($6, prize_info),
@@ -447,6 +465,8 @@ ownerRouter.put(
         body.allowed_file_types ?? null,
         body.locked ?? null,
         req.user!.id,
+        setsOpens,
+        setsCloses,
       ],
     );
 

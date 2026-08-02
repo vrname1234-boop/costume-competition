@@ -284,6 +284,14 @@ studentRouter.put(
     );
     await Promise.all(stale.map((s) => deleteObject(s.image_path)));
 
+    await recordAudit(req, {
+      action: AuditAction.SUBMISSION_PHOTO_REPLACED,
+      entityType: 'submission',
+      entityId: existing.id,
+      oldValue: { imageBytes: existing.image_bytes, imageMime: existing.image_mime },
+      newValue: { imageBytes: image.bytes, imageMime: image.mime },
+    });
+
     res.json({ submission: await present(updated!, baseUrl(req)) });
   }),
 );
