@@ -48,7 +48,10 @@ export function createApp() {
           callback(null, true);
           return;
         }
-        callback(new Error('Origin not allowed'));
+        // Refusing without CORS headers is the actual protection. Throwing
+        // here would surface as an opaque 500, which is a miserable thing to
+        // debug when a deployment domain has simply changed.
+        callback(null, false);
       },
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
