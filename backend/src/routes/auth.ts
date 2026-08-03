@@ -248,8 +248,10 @@ authRouter.post(
       const attempts = user.failed_login_count + 1;
       await query(
         `UPDATE users
-            SET failed_login_count = $2,
-                locked_until = CASE WHEN $2 >= $3 THEN now() + make_interval(mins => $4) ELSE locked_until END
+            SET failed_login_count = $2::int,
+                locked_until = CASE WHEN $2::int >= $3::int
+                                    THEN now() + make_interval(mins => $4::int)
+                                    ELSE locked_until END
           WHERE id = $1`,
         [user.id, attempts, MAX_FAILED_LOGINS, LOCKOUT_MINUTES],
       );
