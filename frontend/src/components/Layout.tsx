@@ -6,7 +6,13 @@ function navClass({ isActive }: { isActive: boolean }) {
   return isActive ? 'is-active' : undefined;
 }
 
-export function Layout({ competitionName }: { competitionName: string }) {
+export function Layout({
+  competitionName,
+  environment,
+}: {
+  competitionName: string;
+  environment: 'development' | 'staging' | 'production' | null;
+}) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -16,6 +22,13 @@ export function Layout({ competitionName }: { competitionName: string }) {
 
   return (
     <div className="app">
+      {environment && environment !== 'production' ? (
+        <div className="env-bar" role="status">
+          {environment === 'staging' ? 'PRACTICE SITE' : 'LOCAL DEVELOPMENT'} — not the real
+          competition. Entries here are test data and will not be judged.
+        </div>
+      ) : null}
+
       <header className="site-header">
         <div className="site-header__inner">
           <Link className="site-header__title" to="/">

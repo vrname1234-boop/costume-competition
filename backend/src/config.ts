@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // Which copy of the platform this is. Staging drives the "practice site"
+  // warning in the UI; it does not change any behaviour.
+  APP_ENVIRONMENT: z.enum(['development', 'staging', 'production']).optional(),
   PORT: z.coerce.number().int().positive().default(4000),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -53,16 +56,22 @@ const env = parsed.data;
 
 const isProduction = env.NODE_ENV === 'production';
 const emailToConsole = env.DEV_EMAIL_TO_CONSOLE === 'true';
+const appEnvironment = env.APP_ENVIRONMENT ?? (isProduction ? 'production' : 'development');
 
-if (isProduction && emailToConsole) {
+// These two rules protect real students, so they follow APP_ENVIRONMENT rather
+// than NODE_ENV: the staging copy runs a production build but is allowed to
+// print verification codes to its log and to have no mail account at all.
+const isLive = appEnvironment === 'production';
+
+if (isLive && emailToConsole) {
   // eslint-disable-next-line no-console
-  console.error('DEV_EMAIL_TO_CONSOLE cannot be enabled in production.');
+  console.error('DEV_EMAIL_TO_CONSOLE cannot be enabled on the live site.');
   process.exit(1);
 }
 
-if (isProduction && !env.RESEND_API_KEY) {
+if (isLive && !env.RESEND_API_KEY) {
   // eslint-disable-next-line no-console
-  console.error('RESEND_API_KEY is required in production.');
+  console.error('RESEND_API_KEY is required on the live site.');
   process.exit(1);
 }
 
@@ -76,6 +85,8 @@ if (isProduction && !useSupabaseStorage) {
 
 export const config = {
   env: env.NODE_ENV,
+  appEnvironment,
+  isLive,
   isProduction,
   port: env.PORT,
   logLevel: env.LOG_LEVEL,

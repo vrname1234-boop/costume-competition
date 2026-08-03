@@ -90,6 +90,18 @@ a:hover { color: var(--accent-hover); }
   min-height: 100%;
 }
 
+/* Deliberately loud: it must be impossible to confuse the practice copy of
+   the site with the real competition. */
+.env-bar {
+  background: #8a5a00;
+  color: #fff;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.4rem 1rem;
+}
+
 .site-header {
   background: var(--surface);
   border-bottom: 1px solid var(--line);

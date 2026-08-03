@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { config } from '../config';
 import { asyncHandler } from '../middleware/asyncHandler';
 import {
   evaluateWindow,
@@ -28,6 +29,10 @@ publicRouter.get(
     const window = evaluateWindow(settings);
 
     res.json({
+      // The frontend warns on the practice site using this, so the warning
+      // comes from the backend the data actually lives in rather than from a
+      // build-time variable that could be set wrongly.
+      environment: config.appEnvironment,
       content,
       competition: {
         name: settings.competition_name,

@@ -25,6 +25,7 @@ export interface SubmissionWindow {
 }
 
 export interface SiteData {
+  environment: 'development' | 'staging' | 'production';
   content: Record<string, string | boolean>;
   competition: {
     name: string;

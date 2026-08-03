@@ -18,6 +18,10 @@ costume-competition/
 Judging, scoring and winner selection are deliberately not built in this
 version.
 
+There are two copies of the deployed platform — a practice one for testing with
+fake students and a real one for the competition. `WORKFLOW.md` explains how
+they are kept apart and how a tested change is published to the real site.
+
 ## Roles
 
 | | Student | Admin (teacher) | Owner |
