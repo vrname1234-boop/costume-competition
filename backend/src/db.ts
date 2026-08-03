@@ -1,9 +1,30 @@
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { config } from './config';
 
+// pg now reads `sslmode` from the connection string and treats `require` as
+// `verify-full`, which rejects the pooler's certificate chain. The explicit
+// `ssl` option below is the one source of truth, so the query parameter is
+// dropped rather than left to fight with it.
+function stripSslMode(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete('sslmode');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 export const pool = new Pool({
-  connectionString: config.database.url,
-  ssl: config.database.ssl ? { rejectUnauthorized: false } : false,
+  connectionString: stripSslMode(config.database.url),
+  // Supplying DATABASE_CA_CERT turns on full verification. Without it the
+  // connection is still encrypted but the chain is not verified — acceptable
+  // for a managed provider reached over its own network, not ideal.
+  ssl: config.database.ssl
+    ? config.database.caCert
+      ? { ca: config.database.caCert, rejectUnauthorized: true }
+      : { rejectUnauthorized: false }
+    : false,
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,

@@ -10,6 +10,9 @@ const schema = z.object({
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   DATABASE_SSL: z.enum(['true', 'false']).default('true'),
+  // PEM of the database provider's CA. When set, the certificate chain is
+  // verified instead of merely encrypted.
+  DATABASE_CA_CERT: z.string().optional(),
 
   // Comma separated list of exact origins allowed to call the API.
   CORS_ORIGINS: z.string().min(1),
@@ -93,6 +96,7 @@ export const config = {
   database: {
     url: env.DATABASE_URL,
     ssl: env.DATABASE_SSL === 'true',
+    caCert: env.DATABASE_CA_CERT,
   },
   corsOrigins: env.CORS_ORIGINS.split(',')
     .map((o) => o.trim())
