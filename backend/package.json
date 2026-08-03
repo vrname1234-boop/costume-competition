@@ -5,7 +5,7 @@
   "description": "API for the school costume competition platform",
   "type": "commonjs",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
