@@ -6,6 +6,7 @@ import { AuditAction, recordAudit } from '../lib/audit';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { processUpload } from '../lib/images';
 import { rateLimit } from '../lib/rateLimit';
+import { findRejectionReason } from '../lib/rejectionReasons';
 import { buildObjectKey, deleteObject, putObject } from '../lib/storage';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { blockUntilPasswordChanged, requireAuth, requireRole } from '../middleware/auth';
@@ -96,6 +97,8 @@ async function validateReferences(houseId?: string | null, categoryId?: string |
 }
 
 async function present(submission: SubmissionRow, apiBaseUrl: string) {
+  const reason = submission.rejection_code ? findRejectionReason(submission.rejection_code) : undefined;
+
   const [house, category] = await Promise.all([
     submission.house_id
       ? queryOne<{ name: string }>(`SELECT name FROM houses WHERE id = $1`, [submission.house_id])
@@ -118,9 +121,14 @@ async function present(submission: SubmissionRow, apiBaseUrl: string) {
     costumeDescription: submission.costume_description,
     status: submission.status,
     reviewNote: submission.review_note,
-    // Only the outcome and the message written for the student. The staff
-    // reason code and internal note are never included here.
+    // The reason and its severity are shown to the student so they know how
+    // serious the rejection was. The free-text staff note is never sent here.
+    rejectionReason: reason?.label ?? null,
+    rejectionSeverity: reason?.severity ?? null,
     locked: submission.locked,
+    // A red rejection that staff have since cleared, so the student is told
+    // they may resubmit rather than being left on the locked message.
+    reopened: !submission.locked && submission.unlocked_at !== null,
     reviewedAt: submission.reviewed_at,
     submittedAt: submission.submitted_at,
     updatedAt: submission.updated_at,

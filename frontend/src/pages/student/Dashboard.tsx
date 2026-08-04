@@ -75,12 +75,24 @@ export function StudentDashboard() {
             <Banner tone="error">
               <strong>Your entry was not approved.</strong>
               <br />
-              Reason: {submission.reviewNote ?? 'No reason was recorded.'}
+              What staff wrote: {submission.reviewNote ?? 'No message was recorded.'}
+              {submission.rejectionReason ? (
+                <>
+                  <br />
+                  Reason: {submission.rejectionReason}
+                  {submission.rejectionSeverity
+                    ? ` (${submission.rejectionSeverity === 'serious' ? 'Red' : 'Yellow'})`
+                    : ''}
+                </>
+              ) : null}
+              <br />
               {submission.locked
-                ? ''
-                : canEdit
-                  ? ' You can fix it and resubmit before the deadline.'
-                  : ' Submissions are now closed, so it can no longer be changed.'}
+                ? 'This is a red reason, so your entry is locked. See below.'
+                : submission.rejectionSeverity === 'serious'
+                  ? 'This was a red reason. Staff have reopened your entry.'
+                  : canEdit
+                    ? 'This is a yellow reason: fix it yourself and resubmit before the deadline.'
+                    : 'Submissions are now closed, so it can no longer be changed.'}
             </Banner>
           )}
 
@@ -90,6 +102,15 @@ export function StudentDashboard() {
               <br />
               {lockedMessage ??
                 'Your entry has been referred to staff and cannot be resubmitted online. Speak to your year adviser or the teacher running the competition.'}
+            </Banner>
+          )}
+
+          {submission.reopened && !submission.locked && (
+            <Banner tone="ok">
+              <strong>Your entry has been reopened.</strong>
+              <br />
+              Staff have unlocked it. Fix the problem you discussed with them, follow the rules and
+              dress code, and resubmit before the deadline.
             </Banner>
           )}
 

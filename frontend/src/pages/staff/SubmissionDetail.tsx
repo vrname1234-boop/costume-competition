@@ -91,8 +91,8 @@ export function StaffSubmissionDetail() {
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
       {submission.locked ? (
         <Banner tone="error">
-          This entry is locked after a serious rejection. The student cannot resubmit until a staff
-          member unlocks it below, after speaking with them.
+          Locked by a red rejection. The student cannot resubmit until you reopen it below, after
+          speaking with them.
         </Banner>
       ) : null}
 
@@ -201,13 +201,18 @@ export function StaffSubmissionDetail() {
                 ) : null}
                 {submission.rejectionReason ? (
                   <>
-                    <dt>Staff reason (not shown to student)</dt>
-                    <dd>{submission.rejectionReason}</dd>
+                    <dt>Reason (student sees this)</dt>
+                    <dd>
+                      {submission.rejectionReason}
+                      {submission.rejectionSeverity
+                        ? ` — ${submission.rejectionSeverity === 'serious' ? 'Red' : 'Yellow'}`
+                        : ''}
+                    </dd>
                   </>
                 ) : null}
                 {submission.internalNote ? (
                   <>
-                    <dt>Staff note (not shown to student)</dt>
+                    <dt>Private staff note (student never sees this)</dt>
                     <dd className="prose">{submission.internalNote}</dd>
                   </>
                 ) : null}
@@ -279,10 +284,17 @@ export function StaffSubmissionDetail() {
           </Button>
         </div>
 
+        <p className="muted small">
+          Rejecting sends the student two things: your written message and the reason you pick
+          below. Both also appear in the audit log. Yellow reasons let the student fix the problem
+          and resubmit on their own. Red reasons lock the entry — the student is told to speak to a
+          teacher, and an Admin or the Owner has to reopen it before they can resubmit.
+        </p>
+
         <Field
-          label="Staff reason for rejecting"
+          label="Reason (the student and the audit log see this)"
           htmlFor="reject-code"
-          hint="Not shown to the student. Recorded in the audit log. Serious reasons lock the entry so it cannot be resubmitted online."
+          hint="Yellow: the student fixes it and resubmits. Red: the entry is locked until staff reopen it."
         >
           <select
             id="reject-code"
@@ -295,21 +307,21 @@ export function StaffSubmissionDetail() {
             }}
           >
             <option value="">Choose a reason</option>
-            <optgroup label="Student can fix and resubmit">
+            <optgroup label="Yellow — student fixes it and resubmits">
               {reasons
                 .filter((reason) => reason.severity === 'minor')
                 .map((reason) => (
                   <option key={reason.code} value={reason.code}>
-                    {reason.label}
+                    Yellow — {reason.label}
                   </option>
                 ))}
             </optgroup>
-            <optgroup label="Serious — locks the entry">
+            <optgroup label="Red — locks the entry until staff reopen it">
               {reasons
                 .filter((reason) => reason.severity === 'serious')
                 .map((reason) => (
                   <option key={reason.code} value={reason.code}>
-                    {reason.label}
+                    Red — {reason.label}
                   </option>
                 ))}
             </optgroup>
@@ -318,15 +330,15 @@ export function StaffSubmissionDetail() {
 
         {selectedReason?.severity === 'serious' ? (
           <Banner tone="error">
-            This locks the entry. The student will be told to speak to a teacher and cannot resubmit
-            until staff unlock it.
+            Red reason. The entry will be locked: the student is told to speak to a teacher and
+            cannot resubmit until an Admin or the Owner reopens it.
           </Banner>
         ) : null}
 
         <Field
-          label="Message to the student"
+          label="Message to the student (the student sees this)"
           htmlFor="reject-reason"
-          hint="The student reads this on their dashboard. Keep it factual."
+          hint="Your own words, shown on the student's dashboard. Choosing a reason above fills in a suggestion you can edit."
         >
           <textarea
             id="reject-reason"
@@ -338,11 +350,11 @@ export function StaffSubmissionDetail() {
         <Field
           label={
             selectedReason?.severity === 'serious'
-              ? 'Staff note (required)'
-              : 'Staff note (optional)'
+              ? 'Private staff note (required for red reasons)'
+              : 'Private staff note (optional)'
           }
           htmlFor="internal-note"
-          hint="Staff and the audit log only. What happened, and anything the next teacher needs to know."
+          hint="Staff and the audit log only — the student never sees this. What happened, and anything the next teacher needs to know."
         >
           <textarea
             id="internal-note"
@@ -377,11 +389,13 @@ export function StaffSubmissionDetail() {
       </Card>
 
       {submission.locked ? (
-        <Card title="Unlock entry">
+        <Card title="Reopen entry">
           <p className="muted small">
-            Unlock only after speaking with the student. The note below is recorded in the audit log.
+            Reopen only after speaking with the student. They will be told their entry is reopened
+            and that they can resubmit before the deadline, following the rules and dress code. The
+            note below is private to staff and recorded in the audit log.
           </p>
-          <Field label="What was agreed" htmlFor="unlock-note">
+          <Field label="What was agreed with the student" htmlFor="unlock-note">
             <textarea
               id="unlock-note"
               value={unlockNote}
@@ -396,10 +410,10 @@ export function StaffSubmissionDetail() {
                   note: unlockNote.trim(),
                 });
                 setUnlockNote('');
-              }, 'Entry unlocked. The student can resubmit before the deadline.')
+              }, 'Entry reopened. The student can resubmit before the deadline.')
             }
           >
-            Unlock entry
+            Reopen entry
           </Button>
         </Card>
       ) : null}

@@ -56,7 +56,10 @@ export interface StudentSubmission {
   costumeDescription: string;
   status: SubmissionStatus;
   reviewNote: string | null;
+  rejectionReason: string | null;
+  rejectionSeverity: 'minor' | 'serious' | null;
   locked: boolean;
+  reopened: boolean;
   reviewedAt: string | null;
   submittedAt: string;
   updatedAt: string;
@@ -85,6 +88,7 @@ export interface AdminSubmission {
   reviewNote: string | null;
   rejectionCode: string | null;
   rejectionReason: string | null;
+  rejectionSeverity: 'minor' | 'serious' | null;
   internalNote: string | null;
   locked: boolean;
   lockedAt: string | null;

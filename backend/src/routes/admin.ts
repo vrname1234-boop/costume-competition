@@ -62,10 +62,12 @@ const shape = (row: SubmissionListRow) => ({
   costumeDescription: row.costume_description,
   status: row.status,
   reviewNote: row.review_note,
-  // Staff-only. The student is served by a separate presenter in student.ts,
-  // which never reads these columns.
+  // The reason and its severity also reach the student; internalNote does not.
   rejectionCode: row.rejection_code,
   rejectionReason: row.rejection_code ? (findRejectionReason(row.rejection_code)?.label ?? null) : null,
+  rejectionSeverity: row.rejection_code
+    ? (findRejectionReason(row.rejection_code)?.severity ?? null)
+    : null,
   internalNote: row.internal_note,
   locked: row.locked,
   lockedAt: row.locked_at,
@@ -518,7 +520,7 @@ adminRouter.get(
     const headers = [
       'Full name', 'School email', 'Year', 'Class/Roll group', 'House', 'Category',
       'Costume name', 'Costume description', 'Status', 'Message to student',
-      'Staff reason', 'Staff note', 'Locked', 'Reviewed by', 'Submitted at',
+      'Rejection reason', 'Staff note', 'Locked', 'Reviewed by', 'Submitted at',
     ];
 
     // Prefixing a cell that starts with a formula character stops spreadsheet

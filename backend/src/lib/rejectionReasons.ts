@@ -1,11 +1,14 @@
 /**
- * Staff-only rejection reason codes.
+ * Rejection reason codes.
  *
- * `minor` means the student fixes it and resubmits straight away — the ordinary
- * case. `serious` locks the entry so it cannot be resubmitted until a teacher
- * unlocks it face to face; it is for conduct, not for mistakes. Keeping the
- * list here rather than in the database means the severity of a code cannot be
- * quietly downgraded from the browser.
+ * `minor` (yellow) means the student fixes it and resubmits straight away — the
+ * ordinary case. `serious` (red) locks the entry so it cannot be resubmitted
+ * until a teacher unlocks it face to face; it is for conduct, not for mistakes.
+ * Keeping the list here rather than in the database means the severity of a
+ * code cannot be quietly downgraded from the browser.
+ *
+ * The label and severity are shown to the student as well as recorded in the
+ * audit log. Only the free-text staff note stays private.
  */
 export interface RejectionReason {
   code: string;
@@ -14,6 +17,12 @@ export interface RejectionReason {
   /** Suggested wording for the message the student sees. Staff can edit it. */
   suggestedMessage: string;
 }
+
+/** Wording used in both staff and student screens, so they match. */
+export const SEVERITY_LABEL: Record<RejectionReason['severity'], string> = {
+  minor: 'Yellow',
+  serious: 'Red',
+};
 
 export const REJECTION_REASONS: readonly RejectionReason[] = [
   {
