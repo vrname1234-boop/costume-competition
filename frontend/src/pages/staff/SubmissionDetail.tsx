@@ -7,6 +7,7 @@ import {
   Banner,
   Button,
   Card,
+  ConfirmDialog,
   Field,
   Loading,
   PageHeader,
@@ -51,6 +52,13 @@ export function StaffSubmissionDetail() {
   const [internalNote, setInternalNote] = useState("");
   const [unlockNote, setUnlockNote] = useState("");
   const [rejectErrors, setRejectErrors] = useState<Record<string, string>>({});
+  const [confirming, setConfirming] = useState<{
+    title: string;
+    body: string;
+    confirmLabel: string;
+    tone: "primary" | "danger";
+    act: () => void;
+  } | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
   const [replacement, setReplacement] = useState<File | null>(null);
 
@@ -351,20 +359,22 @@ export function StaffSubmissionDetail() {
         <div className="button-row" style={{ marginBottom: "1rem" }}>
           <Button
             disabled={busy || submission.status === "approved"}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `Approve ${submission.fullName}'s entry? The student will be told it was accepted.`,
-                )
-              ) {
-                return;
-              }
-              run(
-                () =>
-                  api.post(`/api/admin/submissions/${submission.id}/approve`),
-                "Entry approved. The student has been notified.",
-              );
-            }}
+            onClick={() =>
+              setConfirming({
+                title: "Approve this entry?",
+                body: `${submission.fullName}'s entry will be marked approved and the student will be told it was accepted.`,
+                confirmLabel: "Approve entry",
+                tone: "primary",
+                act: () =>
+                  run(
+                    () =>
+                      api.post(
+                        `/api/admin/submissions/${submission.id}/approve`,
+                      ),
+                    "Entry approved. The student has been notified.",
+                  ),
+              })
+            }
           >
             Approve entry
           </Button>
@@ -476,17 +486,32 @@ export function StaffSubmissionDetail() {
             setRejectErrors(problems);
             if (Object.keys(problems).length > 0) return;
 
-            run(async () => {
-              await api.post(`/api/admin/submissions/${submission.id}/reject`, {
-                reason: rejectReason.trim(),
-                code: rejectCode,
-                internalNote: internalNote.trim() || undefined,
-              });
-              setRejectReason("");
-              setInternalNote("");
-              setRejectCode("");
-              setRejectErrors({});
-            }, "Entry rejected. The student has been notified.");
+            const reject = () =>
+              run(async () => {
+                await api.post(
+                  `/api/admin/submissions/${submission.id}/reject`,
+                  {
+                    reason: rejectReason.trim(),
+                    code: rejectCode,
+                    internalNote: internalNote.trim() || undefined,
+                  },
+                );
+                setRejectReason("");
+                setInternalNote("");
+                setRejectCode("");
+                setRejectErrors({});
+              }, "Entry rejected. The student has been notified.");
+
+            setConfirming({
+              title: "Reject this entry?",
+              body:
+                selectedReason?.severity === "serious"
+                  ? `${submission.fullName} will see your message and the reason "${selectedReason.label}", and the entry will be locked until staff reopen it.`
+                  : `${submission.fullName} will see your message and the reason "${selectedReason?.label ?? ""}", and can fix it and resubmit before the deadline.`,
+              confirmLabel: "Reject entry",
+              tone: "danger",
+              act: reject,
+            });
           }}
         >
           Reject entry
@@ -547,26 +572,28 @@ export function StaffSubmissionDetail() {
               variant="danger"
               disabled={busy || deleteReason.trim().length < 5}
               onClick={() => {
-                if (
-                  !window.confirm(
-                    "Delete this entry and its photos? This cannot be undone.",
-                  )
-                )
-                  return;
-                setBusy(true);
-                void api
-                  .delete(`/api/admin/submissions/${submission.id}`, {
-                    reason: deleteReason.trim(),
-                  })
-                  .then(() => navigate("/staff", { replace: true }))
-                  .catch((err: unknown) => {
-                    setError(
-                      err instanceof ApiError
-                        ? err.message
-                        : "The entry could not be deleted.",
-                    );
-                  })
-                  .finally(() => setBusy(false));
+                setConfirming({
+                  title: "Delete this entry?",
+                  body: "The entry and every photo of it are removed permanently. This cannot be undone — rejecting keeps the evidence.",
+                  confirmLabel: "Delete permanently",
+                  tone: "danger",
+                  act: () => {
+                    setBusy(true);
+                    void api
+                      .delete(`/api/admin/submissions/${submission.id}`, {
+                        reason: deleteReason.trim(),
+                      })
+                      .then(() => navigate("/staff", { replace: true }))
+                      .catch((err: unknown) => {
+                        setError(
+                          err instanceof ApiError
+                            ? err.message
+                            : "The entry could not be deleted.",
+                        );
+                      })
+                      .finally(() => setBusy(false));
+                  },
+                });
               }}
             >
               Delete entry
@@ -581,6 +608,22 @@ export function StaffSubmissionDetail() {
           </p>
         )}
       </Card>
+
+      {confirming ? (
+        <ConfirmDialog
+          title={confirming.title}
+          body={confirming.body}
+          confirmLabel={confirming.confirmLabel}
+          tone={confirming.tone}
+          busy={busy}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            const act = confirming.act;
+            setConfirming(null);
+            act();
+          }}
+        />
+      ) : null}
     </>
   );
 }
