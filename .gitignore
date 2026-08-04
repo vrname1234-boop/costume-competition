@@ -11,3 +11,8 @@ uploads/
 *.local
 .DS_Store
 npm-debug.log*
+
+# Local test artifacts
+backend/.local-storage/
+test-plan.md
+test-report.md
