@@ -7,6 +7,11 @@ import { sendSubmissionDecision } from '../lib/email';
 import { badRequest, notFound } from '../lib/errors';
 import { processUpload } from '../lib/images';
 import { logger } from '../lib/logger';
+import {
+  REJECTION_REASONS,
+  REJECTION_REASON_CODES,
+  findRejectionReason,
+} from '../lib/rejectionReasons';
 import { buildObjectKey, deleteObject, putObject } from '../lib/storage';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { blockUntilPasswordChanged, requireAuth, requireRole } from '../middleware/auth';
@@ -57,6 +62,13 @@ const shape = (row: SubmissionListRow) => ({
   costumeDescription: row.costume_description,
   status: row.status,
   reviewNote: row.review_note,
+  // Staff-only. The student is served by a separate presenter in student.ts,
+  // which never reads these columns.
+  rejectionCode: row.rejection_code,
+  rejectionReason: row.rejection_code ? (findRejectionReason(row.rejection_code)?.label ?? null) : null,
+  internalNote: row.internal_note,
+  locked: row.locked,
+  lockedAt: row.locked_at,
   reviewedBy: row.reviewer_label,
   reviewedAt: row.reviewed_at,
   submittedAt: row.submitted_at,
@@ -187,20 +199,41 @@ adminRouter.get(
   }),
 );
 
+interface DecisionExtras {
+  rejectionCode?: string | null;
+  internalNote?: string | null;
+  lock?: boolean;
+}
+
 async function decide(
   req: Request,
   status: Extract<SubmissionStatus, 'approved' | 'rejected'>,
   note: string | null,
+  extras: DecisionExtras = {},
 ) {
   const id = z.string().uuid().parse(req.params.id);
   const before = await queryOne<SubmissionRow>(`SELECT * FROM submissions WHERE id = $1`, [id]);
   if (!before) throw notFound('That submission no longer exists.');
 
+  const lock = extras.lock ?? false;
+
   const updated = await queryOne<SubmissionRow>(
     `UPDATE submissions
-        SET status = $2, review_note = $3, reviewed_by = $4, reviewed_at = now()
+        SET status = $2, review_note = $3, reviewed_by = $4, reviewed_at = now(),
+            rejection_code = $5, internal_note = $6,
+            locked = $7,
+            locked_at = CASE WHEN $7 THEN now() ELSE locked_at END,
+            locked_by = CASE WHEN $7 THEN $4::uuid ELSE locked_by END
       WHERE id = $1 RETURNING *`,
-    [id, status, note, req.user!.id],
+    [
+      id,
+      status,
+      note,
+      req.user!.id,
+      extras.rejectionCode ?? null,
+      extras.internalNote ?? null,
+      lock,
+    ],
   );
 
   await recordAudit(req, {
@@ -208,8 +241,25 @@ async function decide(
     entityType: 'submission',
     entityId: id,
     oldValue: { status: before.status, reviewNote: before.review_note },
-    newValue: { status, reviewNote: note },
+    // The staff-only reason and note are recorded here deliberately: the audit
+    // log is where the school's record of a serious rejection lives.
+    newValue: {
+      status,
+      reviewNote: note,
+      rejectionCode: extras.rejectionCode ?? null,
+      internalNote: extras.internalNote ?? null,
+      locked: lock,
+    },
   });
+
+  if (lock) {
+    await recordAudit(req, {
+      action: AuditAction.SUBMISSION_LOCKED,
+      entityType: 'submission',
+      entityId: id,
+      newValue: { rejectionCode: extras.rejectionCode ?? null, internalNote: extras.internalNote ?? null },
+    });
+  }
 
   const student = await queryOne<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [
     before.student_id,
@@ -232,20 +282,92 @@ adminRouter.post(
   }),
 );
 
+// The dropdown that staff choose from. Severity is decided here, not in the
+// browser, so a locking code cannot be sent as a minor one.
+adminRouter.get('/rejection-reasons', (_req, res) => {
+  res.json({ reasons: REJECTION_REASONS });
+});
+
 adminRouter.post(
   '/submissions/:id/reject',
   asyncHandler(async (req, res) => {
-    const { reason } = z
+    const { reason, code, internalNote } = z
       .object({
         reason: z
           .string()
           .trim()
           .min(5, 'Give the student a reason so they can fix it.')
           .max(500),
+        code: z.enum(REJECTION_REASON_CODES, {
+          errorMap: () => ({ message: 'Choose a staff reason for this rejection.' }),
+        }),
+        internalNote: z.string().trim().max(1000).optional(),
       })
       .parse(req.body);
-    const updated = await decide(req, 'rejected', reason);
-    res.json({ status: updated.status, reviewNote: updated.review_note });
+
+    const detail = findRejectionReason(code)!;
+    if (detail.severity === 'serious' && !internalNote) {
+      throw badRequest('A serious rejection needs a staff note explaining what happened.');
+    }
+
+    const updated = await decide(req, 'rejected', reason, {
+      rejectionCode: code,
+      internalNote: internalNote ?? null,
+      lock: detail.severity === 'serious',
+    });
+
+    res.json({
+      status: updated.status,
+      reviewNote: updated.review_note,
+      locked: updated.locked,
+      severity: detail.severity,
+    });
+  }),
+);
+
+/**
+ * Unlocking is the end of the conversation the student had to have in person,
+ * so any staff member who can review entries can record it. It is audited with
+ * the note explaining why.
+ */
+adminRouter.post(
+  '/submissions/:id/unlock',
+  asyncHandler(async (req, res) => {
+    const id = z.string().uuid().parse(req.params.id);
+    const { note } = z
+      .object({
+        note: z
+          .string()
+          .trim()
+          .min(5, 'Record what was agreed with the student before unlocking.')
+          .max(1000),
+      })
+      .parse(req.body);
+
+    const before = await queryOne<SubmissionRow>(`SELECT * FROM submissions WHERE id = $1`, [id]);
+    if (!before) throw notFound('That submission no longer exists.');
+    if (!before.locked) throw badRequest('That entry is not locked.');
+
+    const updated = await queryOne<SubmissionRow>(
+      `UPDATE submissions
+          SET locked = false, unlocked_at = now(), unlocked_by = $2,
+              internal_note = CASE
+                WHEN internal_note IS NULL THEN $3::text
+                ELSE internal_note || E'\\n\\nUnlocked: ' || $3::text
+              END
+        WHERE id = $1 RETURNING *`,
+      [id, req.user!.id, note],
+    );
+
+    await recordAudit(req, {
+      action: AuditAction.SUBMISSION_UNLOCKED,
+      entityType: 'submission',
+      entityId: id,
+      oldValue: { locked: true, rejectionCode: before.rejection_code },
+      newValue: { locked: false, note },
+    });
+
+    res.json({ locked: updated!.locked });
   }),
 );
 
@@ -395,8 +517,8 @@ adminRouter.get(
 
     const headers = [
       'Full name', 'School email', 'Year', 'Class/Roll group', 'House', 'Category',
-      'Costume name', 'Costume description', 'Status', 'Review note', 'Reviewed by',
-      'Submitted at',
+      'Costume name', 'Costume description', 'Status', 'Message to student',
+      'Staff reason', 'Staff note', 'Locked', 'Reviewed by', 'Submitted at',
     ];
 
     // Prefixing a cell that starts with a formula character stops spreadsheet
@@ -413,6 +535,8 @@ adminRouter.get(
         [
           r.full_name, r.student_email, r.year_grade, r.class_roll_group, r.house_name,
           r.category_name, r.costume_name, r.costume_description, r.status, r.review_note,
+          r.rejection_code ? (findRejectionReason(r.rejection_code)?.label ?? r.rejection_code) : '',
+          r.internal_note, r.locked ? 'Yes' : 'No',
           r.reviewer_label, r.submitted_at.toISOString(),
         ]
           .map(cell)

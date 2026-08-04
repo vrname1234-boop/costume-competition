@@ -275,6 +275,7 @@ const EDITABLE_KEYS = [
   'photo_requirements',
   'announcement',
   'contact_note',
+  'locked_entry_message',
   'maintenance_message',
 ] as const;
 

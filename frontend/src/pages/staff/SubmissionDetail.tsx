@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
-import type { AdminSubmissionDetail } from '../../api/types';
+import type { AdminSubmissionDetail, RejectionReason } from '../../api/types';
 import { Banner, Button, Card, Field, Loading, PageHeader, StatusBadge } from '../../components/ui';
 import { fileSize, formatDateTime } from '../../lib/format';
 
@@ -25,7 +25,11 @@ export function StaffSubmissionDetail() {
     costume_description: '',
   });
 
+  const [reasons, setReasons] = useState<RejectionReason[]>([]);
+  const [rejectCode, setRejectCode] = useState('');
   const [rejectReason, setRejectReason] = useState('');
+  const [internalNote, setInternalNote] = useState('');
+  const [unlockNote, setUnlockNote] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
   const [replacement, setReplacement] = useState<File | null>(null);
 
@@ -52,6 +56,15 @@ export function StaffSubmissionDetail() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    void api
+      .get<{ reasons: RejectionReason[] }>('/api/admin/rejection-reasons')
+      .then((response) => setReasons(response.reasons))
+      .catch(() => setReasons([]));
+  }, []);
+
+  const selectedReason = reasons.find((reason) => reason.code === rejectCode) ?? null;
+
   const run = (work: () => Promise<unknown>, successMessage: string) => {
     setBusy(true);
     setError(null);
@@ -76,6 +89,12 @@ export function StaffSubmissionDetail() {
 
       {error ? <Banner tone="error">{error}</Banner> : null}
       {notice ? <Banner tone="ok">{notice}</Banner> : null}
+      {submission.locked ? (
+        <Banner tone="error">
+          This entry is locked after a serious rejection. The student cannot resubmit until a staff
+          member unlocks it below, after speaking with them.
+        </Banner>
+      ) : null}
 
       <div className="grid grid--two">
         <Card title="Entry" actions={<StatusBadge status={submission.status} />}>
@@ -176,8 +195,20 @@ export function StaffSubmissionDetail() {
                 ) : null}
                 {submission.reviewNote ? (
                   <>
-                    <dt>Reason given</dt>
+                    <dt>Message sent to student</dt>
                     <dd>{submission.reviewNote}</dd>
+                  </>
+                ) : null}
+                {submission.rejectionReason ? (
+                  <>
+                    <dt>Staff reason (not shown to student)</dt>
+                    <dd>{submission.rejectionReason}</dd>
+                  </>
+                ) : null}
+                {submission.internalNote ? (
+                  <>
+                    <dt>Staff note (not shown to student)</dt>
+                    <dd className="prose">{submission.internalNote}</dd>
                   </>
                 ) : null}
               </dl>
@@ -249,9 +280,53 @@ export function StaffSubmissionDetail() {
         </div>
 
         <Field
-          label="Reject with a reason"
+          label="Staff reason for rejecting"
+          htmlFor="reject-code"
+          hint="Not shown to the student. Recorded in the audit log. Serious reasons lock the entry so it cannot be resubmitted online."
+        >
+          <select
+            id="reject-code"
+            value={rejectCode}
+            onChange={(event) => {
+              const code = event.target.value;
+              setRejectCode(code);
+              const chosen = reasons.find((reason) => reason.code === code);
+              if (chosen && !rejectReason.trim()) setRejectReason(chosen.suggestedMessage);
+            }}
+          >
+            <option value="">Choose a reason</option>
+            <optgroup label="Student can fix and resubmit">
+              {reasons
+                .filter((reason) => reason.severity === 'minor')
+                .map((reason) => (
+                  <option key={reason.code} value={reason.code}>
+                    {reason.label}
+                  </option>
+                ))}
+            </optgroup>
+            <optgroup label="Serious — locks the entry">
+              {reasons
+                .filter((reason) => reason.severity === 'serious')
+                .map((reason) => (
+                  <option key={reason.code} value={reason.code}>
+                    {reason.label}
+                  </option>
+                ))}
+            </optgroup>
+          </select>
+        </Field>
+
+        {selectedReason?.severity === 'serious' ? (
+          <Banner tone="error">
+            This locks the entry. The student will be told to speak to a teacher and cannot resubmit
+            until staff unlock it.
+          </Banner>
+        ) : null}
+
+        <Field
+          label="Message to the student"
           htmlFor="reject-reason"
-          hint="The student sees this reason and can resubmit before the deadline."
+          hint="The student reads this on their dashboard. Keep it factual."
         >
           <textarea
             id="reject-reason"
@@ -259,21 +334,75 @@ export function StaffSubmissionDetail() {
             onChange={(event) => setRejectReason(event.target.value)}
           />
         </Field>
+
+        <Field
+          label={
+            selectedReason?.severity === 'serious'
+              ? 'Staff note (required)'
+              : 'Staff note (optional)'
+          }
+          htmlFor="internal-note"
+          hint="Staff and the audit log only. What happened, and anything the next teacher needs to know."
+        >
+          <textarea
+            id="internal-note"
+            value={internalNote}
+            onChange={(event) => setInternalNote(event.target.value)}
+          />
+        </Field>
+
         <Button
           variant="danger"
-          disabled={busy || rejectReason.trim().length < 5}
+          disabled={
+            busy ||
+            !rejectCode ||
+            rejectReason.trim().length < 5 ||
+            (selectedReason?.severity === 'serious' && internalNote.trim().length < 5)
+          }
           onClick={() =>
             run(async () => {
               await api.post(`/api/admin/submissions/${submission.id}/reject`, {
                 reason: rejectReason.trim(),
+                code: rejectCode,
+                internalNote: internalNote.trim() || undefined,
               });
               setRejectReason('');
+              setInternalNote('');
+              setRejectCode('');
             }, 'Entry rejected. The student has been notified.')
           }
         >
           Reject entry
         </Button>
       </Card>
+
+      {submission.locked ? (
+        <Card title="Unlock entry">
+          <p className="muted small">
+            Unlock only after speaking with the student. The note below is recorded in the audit log.
+          </p>
+          <Field label="What was agreed" htmlFor="unlock-note">
+            <textarea
+              id="unlock-note"
+              value={unlockNote}
+              onChange={(event) => setUnlockNote(event.target.value)}
+            />
+          </Field>
+          <Button
+            disabled={busy || unlockNote.trim().length < 5}
+            onClick={() =>
+              run(async () => {
+                await api.post(`/api/admin/submissions/${submission.id}/unlock`, {
+                  note: unlockNote.trim(),
+                });
+                setUnlockNote('');
+              }, 'Entry unlocked. The student can resubmit before the deadline.')
+            }
+          >
+            Unlock entry
+          </Button>
+        </Card>
+      ) : null}
 
       <Card title="Remove entry">
         <p className="muted small">

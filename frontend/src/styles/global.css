@@ -90,6 +90,17 @@ a:hover { color: var(--accent-hover); }
   min-height: 100%;
 }
 
+.camera__view {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: #111;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
 /* Deliberately loud: it must be impossible to confuse the practice copy of
    the site with the real competition. */
 .env-bar {

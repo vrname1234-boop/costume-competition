@@ -32,6 +32,13 @@ export interface SubmissionRow {
   costume_description: string;
   status: SubmissionStatus;
   review_note: string | null;
+  rejection_code: string | null;
+  internal_note: string | null;
+  locked: boolean;
+  locked_at: Date | null;
+  locked_by: string | null;
+  unlocked_at: Date | null;
+  unlocked_by: string | null;
   reviewed_by: string | null;
   reviewed_at: Date | null;
   image_path: string;

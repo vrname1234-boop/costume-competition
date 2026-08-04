@@ -12,6 +12,7 @@ students until it finishes.
    - `database/migrations/002_defaults.sql`
    - `database/migrations/003_app_role.sql` (see the note in
      `database/README.md` — on Supabase you supply the role password)
+   - `database/migrations/004_rejection_reasons.sql`
 3. Storage → New bucket → name `costume-photos`, **Public: off**. Photos must
    never be publicly listable; the backend hands out signed URLs that expire.
 4. Copy these values:

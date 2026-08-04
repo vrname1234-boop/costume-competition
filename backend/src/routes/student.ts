@@ -10,7 +10,7 @@ import { buildObjectKey, deleteObject, putObject } from '../lib/storage';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { blockUntilPasswordChanged, requireAuth, requireRole } from '../middleware/auth';
 import { photoUrl } from '../services/photos';
-import { evaluateWindow, getSettings, windowMessage } from '../services/settings';
+import { evaluateWindow, getSettings, getSiteContent, windowMessage } from '../services/settings';
 import type { CompetitionSettingsRow, SubmissionRow } from '../types';
 
 export const studentRouter = Router();
@@ -66,6 +66,22 @@ async function assertWindowOpen(): Promise<CompetitionSettingsRow> {
   return settings;
 }
 
+/**
+ * A locked entry is one a teacher has to unlock in person after a serious
+ * rejection, so every write path checks it — the student's own dashboard hides
+ * the buttons, but the block has to hold against a direct API call.
+ */
+async function assertNotLocked(submission: SubmissionRow): Promise<void> {
+  if (!submission.locked) return;
+  const content = await getSiteContent();
+  const message = content.locked_entry_message;
+  throw forbidden(
+    typeof message === 'string' && message.trim()
+      ? message
+      : 'Your entry has been referred to staff and cannot be changed online.',
+  );
+}
+
 async function validateReferences(houseId?: string | null, categoryId?: string | null) {
   if (houseId) {
     const house = await queryOne(`SELECT id FROM houses WHERE id = $1 AND active = true`, [houseId]);
@@ -102,6 +118,9 @@ async function present(submission: SubmissionRow, apiBaseUrl: string) {
     costumeDescription: submission.costume_description,
     status: submission.status,
     reviewNote: submission.review_note,
+    // Only the outcome and the message written for the student. The staff
+    // reason code and internal note are never included here.
+    locked: submission.locked,
     reviewedAt: submission.reviewed_at,
     submittedAt: submission.submitted_at,
     updatedAt: submission.updated_at,
@@ -121,11 +140,17 @@ studentRouter.get(
     );
     const settings = await getSettings();
     const window = evaluateWindow(settings);
+    const content = await getSiteContent();
+    const locked = submission?.locked ?? false;
 
     res.json({
       submission: submission ? await present(submission, baseUrl(req)) : null,
       submissionWindow: { ...window, message: windowMessage(window) },
-      canEdit: window.open,
+      canEdit: window.open && !locked,
+      lockedMessage:
+        locked && typeof content.locked_entry_message === 'string'
+          ? content.locked_entry_message
+          : null,
     });
   }),
 );
@@ -206,6 +231,7 @@ studentRouter.patch(
       [req.user!.id],
     );
     if (!existing) throw notFound('You do not have an entry yet.');
+    await assertNotLocked(existing);
 
     await validateReferences(details.houseId, details.categoryId);
 
@@ -245,6 +271,7 @@ studentRouter.put(
       [req.user!.id],
     );
     if (!existing) throw notFound('You do not have an entry yet.');
+    await assertNotLocked(existing);
 
     const image = await processUpload(
       req.file.buffer,

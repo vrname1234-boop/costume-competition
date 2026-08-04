@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import type { SiteData, StudentSubmission } from '../../api/types';
+import { PhotoCapture } from '../../components/PhotoCapture';
 import { Banner, Button, Card, Field, PageHeader } from '../../components/ui';
 import { fileSize } from '../../lib/format';
 import { text, useSite } from '../../lib/useSite';
@@ -41,6 +42,7 @@ export function EntryForm({ existing }: Props) {
     clearFullBody: false,
     understandsDeadline: false,
   });
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -248,6 +250,22 @@ export function EntryForm({ existing }: Props) {
             hint={`Full-body photo. Maximum ${maxMb} MB.`}
           >
             <div className="filedrop">
+              {cameraOpen ? (
+                <PhotoCapture
+                  onCancel={() => setCameraOpen(false)}
+                  onCapture={(captured) => {
+                    const problem = validateFile(captured);
+                    if (problem) {
+                      setError(problem);
+                      return;
+                    }
+                    setError(null);
+                    setFile(captured);
+                    setCameraOpen(false);
+                  }}
+                />
+              ) : (
+                <>
               <input
                 id="photo"
                 type="file"
@@ -269,6 +287,16 @@ export function EntryForm({ existing }: Props) {
                   setFile(chosen);
                 }}
               />
+              <p className="small muted" style={{ margin: '0.6rem 0 0' }}>
+                On a phone or tablet you can take the photo now instead of choosing a file.
+              </p>
+              <div className="button-row" style={{ marginTop: '0.4rem' }}>
+                <Button variant="secondary" onClick={() => setCameraOpen(true)}>
+                  Use camera
+                </Button>
+              </div>
+                </>
+              )}
               {previewUrl ? (
                 <div style={{ marginTop: '0.75rem' }}>
                   <img className="photo photo--preview" src={previewUrl} alt="Preview of your costume" />

@@ -22,6 +22,12 @@ const FIELDS: { key: string; label: string; hint?: string; multiline: boolean }[
     multiline: true,
   },
   { key: 'contact_note', label: 'Who to contact for help', multiline: false },
+  {
+    key: 'locked_entry_message',
+    label: 'Message for a locked entry',
+    hint: 'Shown to a student whose entry was locked after a serious rejection. Name the person they should speak to.',
+    multiline: true,
+  },
   { key: 'maintenance_message', label: 'Maintenance mode message', multiline: true },
 ];
 

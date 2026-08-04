@@ -1,11 +1,12 @@
 # Database
 
-PostgreSQL 14+ (developed against Supabase). Everything the API needs is created by three SQL files, run in order.
+PostgreSQL 14+ (developed against Supabase). Everything the API needs is created by the SQL files, run in order.
 
 ```
 migrations/001_init.sql      tables, enums, indexes, constraints
 migrations/002_defaults.sql  default editable site content + settings row
 migrations/003_app_role.sql  restricted database role for the API
+migrations/004_rejection_reasons.sql  staff-only rejection reasons and entry locking
 ```
 
 ## 1. Create the Supabase project

@@ -11,6 +11,7 @@ interface Payload {
   submission: StudentSubmission | null;
   submissionWindow: SubmissionWindow;
   canEdit: boolean;
+  lockedMessage: string | null;
 }
 
 function useMySubmission() {
@@ -40,7 +41,7 @@ export function StudentDashboard() {
   if (error) return <Banner tone="error">{error}</Banner>;
   if (!data) return <Loading />;
 
-  const { submission, submissionWindow, canEdit } = data;
+  const { submission, submissionWindow, canEdit, lockedMessage } = data;
 
   return (
     <>
@@ -75,9 +76,20 @@ export function StudentDashboard() {
               <strong>Your entry was not approved.</strong>
               <br />
               Reason: {submission.reviewNote ?? 'No reason was recorded.'}
-              {canEdit
-                ? ' You can fix it and resubmit before the deadline.'
-                : ' Submissions are now closed, so it can no longer be changed.'}
+              {submission.locked
+                ? ''
+                : canEdit
+                  ? ' You can fix it and resubmit before the deadline.'
+                  : ' Submissions are now closed, so it can no longer be changed.'}
+            </Banner>
+          )}
+
+          {submission.locked && (
+            <Banner tone="error">
+              <strong>Your entry is locked.</strong>
+              <br />
+              {lockedMessage ??
+                'Your entry has been referred to staff and cannot be resubmitted online. Speak to your year adviser or the teacher running the competition.'}
             </Banner>
           )}
 

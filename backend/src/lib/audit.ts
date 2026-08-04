@@ -20,6 +20,8 @@ export const AuditAction = {
   SUBMISSION_EDITED_BY_STAFF: 'submission.edited_by_staff',
   SUBMISSION_PHOTO_REPLACED: 'submission.photo_replaced',
   SUBMISSION_DELETED: 'submission.deleted',
+  SUBMISSION_LOCKED: 'submission.locked',
+  SUBMISSION_UNLOCKED: 'submission.unlocked',
   SITE_CONTENT_CHANGED: 'site_content.changed',
   COMPETITION_SETTINGS_CHANGED: 'competition_settings.changed',
   COMPETITION_LOCKED: 'competition_settings.locked',
