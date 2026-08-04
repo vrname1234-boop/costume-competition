@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '../../api/client';
 import type { AdminAccount } from '../../api/types';
-import { Banner, Button, Card, Field, Loading, PageHeader } from '../../components/ui';
+import {
+  Banner,
+  Button,
+  Card,
+  ConfirmDialog,
+  Field,
+  Loading,
+  PageHeader,
+} from '../../components/ui';
 import { formatDateTime } from '../../lib/format';
 
 export function OwnerAdmins() {
@@ -10,6 +18,7 @@ export function OwnerAdmins() {
   const [displayName, setDisplayName] = useState('');
   const [issued, setIssued] = useState<{ username: string; password: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<AdminAccount | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -173,10 +182,7 @@ export function OwnerAdmins() {
                           variant="danger"
                           small
                           disabled={busy}
-                          onClick={() => {
-                            if (!window.confirm(`Delete the account ${admin.username}?`)) return;
-                            run(() => api.delete(`/api/owner/admins/${admin.id}`));
-                          }}
+                          onClick={() => setDeleting(admin)}
                         >
                           Delete
                         </Button>
@@ -189,6 +195,22 @@ export function OwnerAdmins() {
           </div>
         )}
       </Card>
+
+      {deleting ? (
+        <ConfirmDialog
+          title={`Delete ${deleting.username}?`}
+          body="The account is removed for good. Disabling it instead keeps the record of what they reviewed."
+          confirmLabel="Delete account"
+          tone="danger"
+          busy={busy}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => {
+            const target = deleting;
+            setDeleting(null);
+            run(() => api.delete(`/api/owner/admins/${target.id}`));
+          }}
+        />
+      ) : null}
     </>
   );
 }
