@@ -478,8 +478,12 @@ adminRouter.put(
   }),
 );
 
+// Deletion destroys the photo as well as the row, so it is the one review
+// action an Admin cannot take: a compromised or careless Admin account can
+// reject and lock entries, but cannot erase them.
 adminRouter.delete(
   '/submissions/:id',
+  requireRole('owner'),
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const { reason } = z
