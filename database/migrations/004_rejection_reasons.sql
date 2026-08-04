@@ -33,7 +33,9 @@ CREATE INDEX IF NOT EXISTS submissions_locked_idx ON submissions (locked) WHERE 
 INSERT INTO site_content (key, value)
 VALUES (
   'locked_entry_message',
-  'Your entry has been referred to staff and cannot be resubmitted online. Speak to your year adviser or the teacher running the competition. They can unlock your entry once you have spoken with them.'
+  to_jsonb(
+    'Your entry has been referred to staff and cannot be resubmitted online. Speak to your year adviser or the teacher running the competition. They can unlock your entry once you have spoken with them.'::text
+  )
 )
 ON CONFLICT (key) DO NOTHING;
 
