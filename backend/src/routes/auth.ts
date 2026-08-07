@@ -47,8 +47,10 @@ const emailSchema = z
   );
 
 /**
- * Registration, login and reset all return the same shape whether or not the
- * account exists, so the API cannot be used to discover who has registered.
+ * Login and password reset give nothing away about whether an account exists.
+ * Registration is the deliberate exception: telling a student their address is
+ * already registered saves far more confusion than the enumeration it allows,
+ * and the register endpoint is rate limited per address and per IP.
  */
 const GENERIC_SENT = {
   message: 'If that school email is valid, a 6-digit code has been sent to it.',
@@ -149,9 +151,9 @@ authRouter.post(
     );
 
     if (existing && existing.status === 'active') {
-      // Already registered: say nothing different, but do not send a code.
-      res.json(GENERIC_SENT);
-      return;
+      throw badRequest(
+        'That school email already has an account. Sign in instead, or use "Forgot password" if you cannot get in.',
+      );
     }
 
     if (!existing) {
@@ -168,7 +170,7 @@ authRouter.post(
     } catch {
       throw badRequest('We could not send the verification email. Please try again shortly.');
     }
-    res.json(GENERIC_SENT);
+    res.json({ message: `A 6-digit code has been sent to ${email}. It expires in 10 minutes.` });
   }),
 );
 
