@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { config } from "../config";
+import { addSubscriber, removeSubscriber } from "../lib/siteEvents";
 import { asyncHandler } from "../middleware/asyncHandler";
 import {
   evaluateWindow,
@@ -12,19 +13,35 @@ import {
 
 export const publicRouter = Router();
 
+const EVENT_KEEPALIVE_MS = 25_000;
+
 /**
- * Cheap enough to poll every few seconds: open pages watch this so they can
- * reload themselves the moment maintenance is switched on or off, instead of
- * carrying on in a state that no longer applies.
+ * One quiet, long-lived connection per open page. Nothing is sent until the
+ * Owner actually switches maintenance, at which point the page is told to
+ * reload; there are no repeated status requests while nothing changes.
+ *
+ * The comment lines every 25s keep proxies (Render's included) from closing an
+ * idle connection. If one is dropped anyway, EventSource reconnects by itself.
  */
-publicRouter.get(
-  "/status",
-  asyncHandler(async (_req, res) => {
-    const content = await getSiteContent();
-    res.setHeader("Cache-Control", "no-store");
-    res.json({ maintenance: content.maintenance_mode === true });
-  }),
-);
+publicRouter.get("/events", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.write(": connected\n\n");
+  addSubscriber(res);
+
+  const keepAlive = setInterval(
+    () => res.write(": keep-alive\n\n"),
+    EVENT_KEEPALIVE_MS,
+  );
+  req.on("close", () => {
+    clearInterval(keepAlive);
+    removeSubscriber(res);
+  });
+});
 
 /**
  * Everything the public landing page and the submission form need, in one

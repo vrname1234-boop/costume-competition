@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { API_BASE, api } from "../api/client";
 import type { SiteData } from "../api/types";
 
 export function text(
@@ -33,47 +33,22 @@ export function useSite() {
     void reload();
   }, [reload]);
 
-  useMaintenanceWatch(site);
+  useMaintenanceWatch();
 
   return { site, error, loading, reload };
 }
 
-const MAINTENANCE_POLL_MS = 20_000;
-
 /**
  * A page left open must not keep working after maintenance is switched on, and
- * must come back by itself when it is switched off. Rather than reconciling
- * half-loaded state, reload the page whenever the flag changes.
+ * must come back by itself when it is switched off. The backend pushes a
+ * message on one idle connection when the Owner flips the switch, so nothing
+ * is requested while nothing changes. Reloading, rather than reconciling
+ * half-loaded state, guarantees the page cannot be left partly in one mode.
  */
-function useMaintenanceWatch(site: SiteData | null): void {
-  const known = site ? site.content.maintenance_mode === true : null;
-
+function useMaintenanceWatch(): void {
   useEffect(() => {
-    if (known === null) return;
-
-    let cancelled = false;
-    const check = async () => {
-      if (document.hidden) return;
-      try {
-        const status = await api.get<{ maintenance: boolean }>(
-          "/api/public/status",
-        );
-        if (!cancelled && status.maintenance !== known)
-          window.location.reload();
-      } catch {
-        // Offline or the backend is restarting; try again on the next tick.
-      }
-    };
-
-    const timer = window.setInterval(() => void check(), MAINTENANCE_POLL_MS);
-    // A tab that has been in the background can be badly out of date.
-    const onVisible = () => void check();
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [known]);
+    const source = new EventSource(`${API_BASE}/api/public/events`);
+    source.addEventListener("maintenance", () => window.location.reload());
+    return () => source.close();
+  }, []);
 }
