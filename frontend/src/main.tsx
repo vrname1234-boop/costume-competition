@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -11,6 +12,8 @@ createRoot(container).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      {/* Vercel Web Analytics: visitor and page view counts only. */}
+      <Analytics />
     </BrowserRouter>
   </StrictMode>,
 );
