@@ -388,9 +388,10 @@ ownerRouter.put(
       newValue: { maintenance_mode: enabled },
     });
 
-    // Tell every open page to reload so none of them keeps running in the
-    // state that has just been switched away from.
-    broadcast("maintenance");
+    // Tell every open page so none of them keeps running in the state that has
+    // just been switched away from. Turning maintenance on warns first, giving
+    // anyone mid-upload a moment; turning it off restores the site at once.
+    broadcast("maintenance", { enabled });
 
     res.json({ maintenanceMode: enabled });
   }),

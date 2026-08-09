@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "./auth/AuthContext";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { RequireRole } from "./auth/RequireRole";
 import { Layout } from "./components/Layout";
 import { Banner, Card } from "./components/ui";
@@ -17,7 +17,7 @@ import { SignIn } from "./pages/public/SignIn";
 import { StaffSubmissionDetail } from "./pages/staff/SubmissionDetail";
 import { StaffSubmissions } from "./pages/staff/Submissions";
 import { StudentDashboard, StudentEntryPage } from "./pages/student/Dashboard";
-import { text, useSite } from "./lib/useSite";
+import { text, useMaintenanceWatch, useSite } from "./lib/useSite";
 
 function NotFound() {
   return (
@@ -39,6 +39,32 @@ function Maintenance({ message }: { message: string }) {
           "The competition site is closed while we make updates. Please check back later."}
       </Banner>
     </Card>
+  );
+}
+
+/**
+ * Students are moved into and out of maintenance without touching anything.
+ * Staff are left alone: they are the people working on the site, so their
+ * page must not disappear from under them when the switch is thrown.
+ */
+function MaintenanceWatcher() {
+  const { user } = useAuth();
+  const seconds = useMaintenanceWatch(user === null || user.role === "student");
+
+  return (
+    <>
+      {seconds === null ? null : (
+        <Banner tone="warn">
+          <strong>Maintenance mode is starting in {seconds} seconds.</strong>
+          <br />
+          Please don&apos;t start any new submissions, uploads, or edits while
+          maintenance is starting. If you&apos;re currently working on
+          something, please wait until maintenance is complete before
+          continuing.
+        </Banner>
+      )}
+      <Outlet />
+    </>
   );
 }
 
@@ -75,97 +101,99 @@ export default function App() {
             />
           }
         >
-          <Route index element={studentPage(<Landing />)} />
-          <Route path="sign-in" element={<SignIn />} />
-          <Route path="register" element={studentPage(<Register />)} />
-          <Route path="forgot-password" element={<ForgotPassword />} />
+          <Route element={<MaintenanceWatcher />}>
+            <Route index element={studentPage(<Landing />)} />
+            <Route path="sign-in" element={<SignIn />} />
+            <Route path="register" element={studentPage(<Register />)} />
+            <Route path="forgot-password" element={<ForgotPassword />} />
 
-          <Route
-            path="change-password"
-            element={
-              <RequireRole roles={["student", "admin", "owner"]}>
-                <ChangePassword />
-              </RequireRole>
-            }
-          />
+            <Route
+              path="change-password"
+              element={
+                <RequireRole roles={["student", "admin", "owner"]}>
+                  <ChangePassword />
+                </RequireRole>
+              }
+            />
 
-          <Route
-            path="dashboard"
-            element={
-              <RequireRole roles={["student"]}>
-                {studentPage(<StudentDashboard />)}
-              </RequireRole>
-            }
-          />
-          <Route
-            path="submit"
-            element={
-              <RequireRole roles={["student"]}>
-                {studentPage(<StudentEntryPage />)}
-              </RequireRole>
-            }
-          />
+            <Route
+              path="dashboard"
+              element={
+                <RequireRole roles={["student"]}>
+                  {studentPage(<StudentDashboard />)}
+                </RequireRole>
+              }
+            />
+            <Route
+              path="submit"
+              element={
+                <RequireRole roles={["student"]}>
+                  {studentPage(<StudentEntryPage />)}
+                </RequireRole>
+              }
+            />
 
-          <Route
-            path="staff"
-            element={
-              <RequireRole roles={["admin", "owner"]}>
-                <StaffSubmissions />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="staff/submissions/:id"
-            element={
-              <RequireRole roles={["admin", "owner"]}>
-                <StaffSubmissionDetail />
-              </RequireRole>
-            }
-          />
+            <Route
+              path="staff"
+              element={
+                <RequireRole roles={["admin", "owner"]}>
+                  <StaffSubmissions />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="staff/submissions/:id"
+              element={
+                <RequireRole roles={["admin", "owner"]}>
+                  <StaffSubmissionDetail />
+                </RequireRole>
+              }
+            />
 
-          <Route
-            path="owner"
-            element={
-              <RequireRole roles={["owner"]}>
-                <OwnerHome />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="owner/content"
-            element={
-              <RequireRole roles={["owner"]}>
-                <OwnerSiteEditor />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="owner/competition"
-            element={
-              <RequireRole roles={["owner"]}>
-                <OwnerCompetition />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="owner/admins"
-            element={
-              <RequireRole roles={["owner"]}>
-                <OwnerAdmins />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="owner/audit"
-            element={
-              <RequireRole roles={["owner"]}>
-                <OwnerAuditLog />
-              </RequireRole>
-            }
-          />
+            <Route
+              path="owner"
+              element={
+                <RequireRole roles={["owner"]}>
+                  <OwnerHome />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="owner/content"
+              element={
+                <RequireRole roles={["owner"]}>
+                  <OwnerSiteEditor />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="owner/competition"
+              element={
+                <RequireRole roles={["owner"]}>
+                  <OwnerCompetition />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="owner/admins"
+              element={
+                <RequireRole roles={["owner"]}>
+                  <OwnerAdmins />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="owner/audit"
+              element={
+                <RequireRole roles={["owner"]}>
+                  <OwnerAuditLog />
+                </RequireRole>
+              }
+            />
 
-          <Route path="admin" element={<Navigate to="/staff" replace />} />
-          <Route path="*" element={<NotFound />} />
+            <Route path="admin" element={<Navigate to="/staff" replace />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
         </Route>
       </Routes>
     </AuthProvider>

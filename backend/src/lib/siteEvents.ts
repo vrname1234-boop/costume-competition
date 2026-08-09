@@ -23,9 +23,13 @@ export function removeSubscriber(res: Response): void {
   subscribers.delete(res);
 }
 
-export function broadcast(event: SiteEvent): void {
+export function broadcast(
+  event: SiteEvent,
+  data: Record<string, unknown>,
+): void {
+  const payload = JSON.stringify(data);
   for (const res of subscribers) {
-    res.write(`event: ${event}\ndata: {}\n\n`);
+    res.write(`event: ${event}\ndata: ${payload}\n\n`);
   }
 }
 
