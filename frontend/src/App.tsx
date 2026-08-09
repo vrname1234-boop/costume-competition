@@ -78,10 +78,7 @@ export default function App() {
           <Route index element={studentPage(<Landing />)} />
           <Route path="sign-in" element={<SignIn />} />
           <Route path="register" element={studentPage(<Register />)} />
-          <Route
-            path="forgot-password"
-            element={studentPage(<ForgotPassword />)}
-          />
+          <Route path="forgot-password" element={<ForgotPassword />} />
 
           <Route
             path="change-password"
