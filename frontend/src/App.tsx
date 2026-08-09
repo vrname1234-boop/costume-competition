@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { RequireRole } from "./auth/RequireRole";
@@ -31,12 +32,13 @@ function NotFound() {
 
 function Maintenance({ message }: { message: string }) {
   return (
-    <div className="container" style={{ paddingTop: "3rem" }}>
-      <Card narrow>
-        <h1>Temporarily unavailable</h1>
-        <Banner tone="warn">{message}</Banner>
-      </Card>
-    </div>
+    <Card narrow>
+      <h1>Temporarily unavailable</h1>
+      <Banner tone="warn">
+        {message ||
+          "The competition site is closed while we make updates. Please check back later."}
+      </Banner>
+    </Card>
   );
 }
 
@@ -50,6 +52,18 @@ export default function App() {
 
   const maintenance = site?.content.maintenance_mode === true;
 
+  /**
+   * While maintenance is on, every student-facing page becomes the maintenance
+   * notice. Staff sign in and the staff and owner screens stay reachable so
+   * the site can be worked on and the switch turned back off.
+   */
+  const studentPage = (element: ReactElement) =>
+    maintenance && site ? (
+      <Maintenance message={text(site.content, "maintenance_message")} />
+    ) : (
+      element
+    );
+
   return (
     <AuthProvider>
       <Routes>
@@ -61,21 +75,13 @@ export default function App() {
             />
           }
         >
-          <Route
-            index
-            element={
-              maintenance && site ? (
-                <Maintenance
-                  message={text(site.content, "maintenance_message")}
-                />
-              ) : (
-                <Landing />
-              )
-            }
-          />
+          <Route index element={studentPage(<Landing />)} />
           <Route path="sign-in" element={<SignIn />} />
-          <Route path="register" element={<Register />} />
-          <Route path="forgot-password" element={<ForgotPassword />} />
+          <Route path="register" element={studentPage(<Register />)} />
+          <Route
+            path="forgot-password"
+            element={studentPage(<ForgotPassword />)}
+          />
 
           <Route
             path="change-password"
@@ -90,7 +96,7 @@ export default function App() {
             path="dashboard"
             element={
               <RequireRole roles={["student"]}>
-                <StudentDashboard />
+                {studentPage(<StudentDashboard />)}
               </RequireRole>
             }
           />
@@ -98,7 +104,7 @@ export default function App() {
             path="submit"
             element={
               <RequireRole roles={["student"]}>
-                <StudentEntryPage />
+                {studentPage(<StudentEntryPage />)}
               </RequireRole>
             }
           />

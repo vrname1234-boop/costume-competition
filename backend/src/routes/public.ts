@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import { config } from '../config';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { Router } from "express";
+import { config } from "../config";
+import { asyncHandler } from "../middleware/asyncHandler";
 import {
   evaluateWindow,
   getSettings,
@@ -8,7 +8,7 @@ import {
   listCategories,
   listHouses,
   windowMessage,
-} from '../services/settings';
+} from "../services/settings";
 
 export const publicRouter = Router();
 
@@ -17,7 +17,7 @@ export const publicRouter = Router();
  * request. Nothing here is sensitive: no user data, no counts, no keys.
  */
 publicRouter.get(
-  '/site',
+  "/site",
   asyncHandler(async (_req, res) => {
     const [settings, content, houses, categories] = await Promise.all([
       getSettings(),
@@ -27,6 +27,42 @@ publicRouter.get(
     ]);
 
     const window = evaluateWindow(settings);
+
+    // In maintenance mode the public API gives out nothing about the
+    // competition: dates, categories, houses and rules all stay hidden, so a
+    // half-finished change cannot be read off the site while it is being made.
+    if (content.maintenance_mode === true) {
+      res.json({
+        environment: config.appEnvironment,
+        maintenance: true,
+        content: {
+          competition_title: content.competition_title ?? null,
+          maintenance_mode: true,
+          maintenance_message: content.maintenance_message ?? null,
+        },
+        competition: {
+          name: settings.competition_name,
+          opensAt: null,
+          closesAt: null,
+          timezone: settings.timezone,
+          numberOfWinners: 0,
+          prizeInfo: "",
+          requirements: "",
+          maxFileSizeMb: settings.max_file_size_mb,
+          allowedFileTypes: settings.allowed_file_types,
+        },
+        submissionWindow: {
+          open: false,
+          reason: "disabled",
+          opensAt: null,
+          closesAt: null,
+          message: "",
+        },
+        houses: [],
+        categories: [],
+      });
+      return;
+    }
 
     res.json({
       // The frontend warns on the practice site using this, so the warning
