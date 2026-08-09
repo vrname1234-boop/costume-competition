@@ -13,6 +13,20 @@ import {
 export const publicRouter = Router();
 
 /**
+ * Cheap enough to poll every few seconds: open pages watch this so they can
+ * reload themselves the moment maintenance is switched on or off, instead of
+ * carrying on in a state that no longer applies.
+ */
+publicRouter.get(
+  "/status",
+  asyncHandler(async (_req, res) => {
+    const content = await getSiteContent();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ maintenance: content.maintenance_mode === true });
+  }),
+);
+
+/**
  * Everything the public landing page and the submission form need, in one
  * request. Nothing here is sensitive: no user data, no counts, no keys.
  */
