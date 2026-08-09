@@ -97,19 +97,14 @@ export function createApp() {
   });
 
   /**
-   * Students cannot register or sign in while the site is down for work; staff
-   * sign in is left alone so the Owner can always switch maintenance back off.
+   * Registration is closed to students during maintenance. Sign in and
+   * password reset stay open: those routes reject student accounts themselves
+   * once the credentials check out, so staff and the Owner can still get in
+   * and turn maintenance back off.
    */
   const studentAuthGate = asyncHandler(async (req, _res, next) => {
-    const path = req.path;
-    const studentOnly =
-      path.startsWith("/student/") ||
-      path.startsWith("/forgot-password") ||
-      path.startsWith("/reset-password");
-    if (studentOnly && (await isMaintenanceMode())) {
-      next(
-        forbidden("The site is temporarily unavailable while we make updates."),
-      );
+    if (req.path.startsWith("/student/") && (await isMaintenanceMode())) {
+      next(forbidden("Student access is unavailable during maintenance."));
       return;
     }
     next();

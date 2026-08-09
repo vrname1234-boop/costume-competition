@@ -1,12 +1,21 @@
-import { Router } from 'express';
-import { z } from 'zod';
-import { query, queryOne } from '../db';
-import { AuditAction, diff, recordAudit } from '../lib/audit';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
-import { MIN_STAFF_PASSWORD, generateTemporaryPassword, hashPassword } from '../lib/passwords';
-import { revokeAllUserTokens } from '../lib/tokens';
-import { asyncHandler } from '../middleware/asyncHandler';
-import { blockUntilPasswordChanged, requireAuth, requireRole } from '../middleware/auth';
+import { Router } from "express";
+import { z } from "zod";
+import { query, queryOne } from "../db";
+import { AuditAction, diff, recordAudit } from "../lib/audit";
+import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
+import {
+  MIN_STAFF_PASSWORD,
+  generateTemporaryPassword,
+  hashPassword,
+} from "../lib/passwords";
+import { broadcast } from "../lib/siteEvents";
+import { revokeAllUserTokens } from "../lib/tokens";
+import { asyncHandler } from "../middleware/asyncHandler";
+import {
+  blockUntilPasswordChanged,
+  requireAuth,
+  requireRole,
+} from "../middleware/auth";
 import {
   LOCKED_SETTING_FIELDS,
   getSettings,
@@ -14,21 +23,25 @@ import {
   isCompetitionLocked,
   listCategories,
   listHouses,
-} from '../services/settings';
-import type { CategoryRow, HouseRow, UserRow } from '../types';
+} from "../services/settings";
+import type { CategoryRow, HouseRow, UserRow } from "../types";
 
 export const ownerRouter = Router();
 
-ownerRouter.use(requireAuth, blockUntilPasswordChanged, requireRole('owner'));
+ownerRouter.use(requireAuth, blockUntilPasswordChanged, requireRole("owner"));
 
 // ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
 
 ownerRouter.get(
-  '/stats',
+  "/stats",
   asyncHandler(async (_req, res) => {
-    const [users] = await query<{ students: string; admins: string; disabled_admins: string }>(
+    const [users] = await query<{
+      students: string;
+      admins: string;
+      disabled_admins: string;
+    }>(
       `SELECT count(*) FILTER (WHERE role = 'student' AND status = 'active')  AS students,
               count(*) FILTER (WHERE role = 'admin'   AND status = 'active')  AS admins,
               count(*) FILTER (WHERE role = 'admin'   AND status = 'disabled') AS disabled_admins
@@ -79,7 +92,7 @@ const adminShape = (row: UserRow) => ({
 });
 
 ownerRouter.get(
-  '/admins',
+  "/admins",
   asyncHandler(async (_req, res) => {
     const rows = await query<UserRow>(
       `SELECT * FROM users WHERE role = 'admin' AND deleted_at IS NULL ORDER BY lower(username)`,
@@ -89,7 +102,7 @@ ownerRouter.get(
 );
 
 ownerRouter.post(
-  '/admins',
+  "/admins",
   asyncHandler(async (req, res) => {
     const { username, displayName } = z
       .object({
@@ -97,10 +110,17 @@ ownerRouter.post(
           .string()
           .trim()
           .toLowerCase()
-          .min(3, 'Username must be at least 3 characters.')
+          .min(3, "Username must be at least 3 characters.")
           .max(40)
-          .regex(/^[a-z0-9._-]+$/, 'Use letters, numbers, dots, dashes and underscores only.'),
-        displayName: z.string().trim().min(2, 'Enter the teacher\u2019s name.').max(120),
+          .regex(
+            /^[a-z0-9._-]+$/,
+            "Use letters, numbers, dots, dashes and underscores only.",
+          ),
+        displayName: z
+          .string()
+          .trim()
+          .min(2, "Enter the teacher\u2019s name.")
+          .max(120),
       })
       .parse(req.body);
 
@@ -108,7 +128,7 @@ ownerRouter.post(
       `SELECT id FROM users WHERE username = $1 AND deleted_at IS NULL`,
       [username],
     );
-    if (existing) throw conflict('That username is already taken.');
+    if (existing) throw conflict("That username is already taken.");
 
     // The Owner sees this password once and hands it to the teacher; the
     // teacher must replace it at first sign in.
@@ -119,12 +139,17 @@ ownerRouter.post(
                           must_change_password, created_by)
        VALUES ('admin', 'active', $1, $2, $3, true, $4)
        RETURNING *`,
-      [username, displayName, await hashPassword(temporaryPassword), req.user!.id],
+      [
+        username,
+        displayName,
+        await hashPassword(temporaryPassword),
+        req.user!.id,
+      ],
     );
 
     await recordAudit(req, {
       action: AuditAction.ADMIN_CREATED,
-      entityType: 'user',
+      entityType: "user",
       entityId: created!.id,
       newValue: { username, displayName },
     });
@@ -138,13 +163,14 @@ async function loadAdmin(id: string): Promise<UserRow> {
     `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
     [id],
   );
-  if (!row) throw notFound('That account no longer exists.');
-  if (row.role !== 'admin') throw forbidden('Only admin accounts can be managed here.');
+  if (!row) throw notFound("That account no longer exists.");
+  if (row.role !== "admin")
+    throw forbidden("Only admin accounts can be managed here.");
   return row;
 }
 
 ownerRouter.patch(
-  '/admins/:id',
+  "/admins/:id",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const body = z
@@ -165,7 +191,7 @@ ownerRouter.patch(
 
     await recordAudit(req, {
       action: AuditAction.ADMIN_UPDATED,
-      entityType: 'user',
+      entityType: "user",
       entityId: id,
       oldValue: changes.old,
       newValue: changes.new,
@@ -176,7 +202,7 @@ ownerRouter.patch(
 );
 
 ownerRouter.post(
-  '/admins/:id/disable',
+  "/admins/:id/disable",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const before = await loadAdmin(id);
@@ -188,17 +214,17 @@ ownerRouter.post(
     await revokeAllUserTokens(id);
     await recordAudit(req, {
       action: AuditAction.ADMIN_DISABLED,
-      entityType: 'user',
+      entityType: "user",
       entityId: id,
       oldValue: { status: before.status },
-      newValue: { status: 'disabled' },
+      newValue: { status: "disabled" },
     });
     res.json({ admin: adminShape(updated!) });
   }),
 );
 
 ownerRouter.post(
-  '/admins/:id/restore',
+  "/admins/:id/restore",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const before = await loadAdmin(id);
@@ -208,17 +234,17 @@ ownerRouter.post(
     );
     await recordAudit(req, {
       action: AuditAction.ADMIN_RESTORED,
-      entityType: 'user',
+      entityType: "user",
       entityId: id,
       oldValue: { status: before.status },
-      newValue: { status: 'active' },
+      newValue: { status: "active" },
     });
     res.json({ admin: adminShape(updated!) });
   }),
 );
 
 ownerRouter.post(
-  '/admins/:id/reset-password',
+  "/admins/:id/reset-password",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     await loadAdmin(id);
@@ -233,7 +259,7 @@ ownerRouter.post(
     await revokeAllUserTokens(id);
     await recordAudit(req, {
       action: AuditAction.ADMIN_PASSWORD_RESET,
-      entityType: 'user',
+      entityType: "user",
       entityId: id,
     });
     res.json({ temporaryPassword, minimumLength: MIN_STAFF_PASSWORD });
@@ -241,7 +267,7 @@ ownerRouter.post(
 );
 
 ownerRouter.delete(
-  '/admins/:id',
+  "/admins/:id",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const before = await loadAdmin(id);
@@ -253,7 +279,7 @@ ownerRouter.delete(
     await revokeAllUserTokens(id);
     await recordAudit(req, {
       action: AuditAction.ADMIN_DELETED,
-      entityType: 'user',
+      entityType: "user",
       entityId: id,
       oldValue: { username: before.username, displayName: before.display_name },
     });
@@ -266,35 +292,36 @@ ownerRouter.delete(
 // ---------------------------------------------------------------------------
 
 const EDITABLE_KEYS = [
-  'competition_title',
-  'homepage_intro',
-  'description',
-  'rules',
-  'dress_code',
-  'instructions',
-  'photo_requirements',
-  'announcement',
-  'contact_note',
-  'locked_entry_message',
-  'maintenance_message',
+  "competition_title",
+  "homepage_intro",
+  "description",
+  "rules",
+  "dress_code",
+  "instructions",
+  "photo_requirements",
+  "announcement",
+  "contact_note",
+  "locked_entry_message",
+  "maintenance_message",
 ] as const;
 
 ownerRouter.get(
-  '/site-content',
+  "/site-content",
   asyncHandler(async (_req, res) => {
     res.json({ content: await getSiteContent(), editableKeys: EDITABLE_KEYS });
   }),
 );
 
 ownerRouter.put(
-  '/site-content',
+  "/site-content",
   asyncHandler(async (req, res) => {
     const body = z.record(z.string().max(20_000)).parse(req.body);
 
     const unknownKeys = Object.keys(body).filter(
       (k) => !(EDITABLE_KEYS as readonly string[]).includes(k),
     );
-    if (unknownKeys.length) throw badRequest(`Unknown content key: ${unknownKeys.join(', ')}`);
+    if (unknownKeys.length)
+      throw badRequest(`Unknown content key: ${unknownKeys.join(", ")}`);
 
     const before = await getSiteContent();
     const changedOld: Record<string, unknown> = {};
@@ -316,7 +343,7 @@ ownerRouter.put(
     if (Object.keys(changedNew).length) {
       await recordAudit(req, {
         action: AuditAction.SITE_CONTENT_CHANGED,
-        entityType: 'site_content',
+        entityType: "site_content",
         oldValue: changedOld,
         newValue: changedNew,
       });
@@ -327,10 +354,13 @@ ownerRouter.put(
 );
 
 ownerRouter.put(
-  '/maintenance',
+  "/maintenance",
   asyncHandler(async (req, res) => {
     const { enabled, message } = z
-      .object({ enabled: z.boolean(), message: z.string().max(1000).optional() })
+      .object({
+        enabled: z.boolean(),
+        message: z.string().max(1000).optional(),
+      })
       .parse(req.body);
 
     const before = await getSiteContent();
@@ -353,10 +383,15 @@ ownerRouter.put(
 
     await recordAudit(req, {
       action: AuditAction.MAINTENANCE_TOGGLED,
-      entityType: 'site_content',
+      entityType: "site_content",
       oldValue: { maintenance_mode: before.maintenance_mode },
       newValue: { maintenance_mode: enabled },
     });
+
+    // Tell every open page so none of them keeps running in the state that has
+    // just been switched away from. Turning maintenance on warns first, giving
+    // anyone mid-upload a moment; turning it off restores the site at once.
+    broadcast("maintenance", { enabled });
 
     res.json({ maintenanceMode: enabled });
   }),
@@ -377,8 +412,8 @@ const settingsSchema = z.object({
   requirements: z.string().max(4000).optional(),
   max_file_size_mb: z.number().int().min(1).max(25).optional(),
   allowed_file_types: z
-    .array(z.enum(['image/jpeg', 'image/png', 'image/webp']))
-    .min(1, 'Allow at least one image type.')
+    .array(z.enum(["image/jpeg", "image/png", "image/webp"]))
+    .min(1, "Allow at least one image type.")
     .optional(),
   locked: z.boolean().optional(),
 });
@@ -390,14 +425,17 @@ const settingsSchema = z.object({
  */
 function sameValue(incoming: unknown, stored: unknown): boolean {
   if (stored instanceof Date) {
-    return typeof incoming === 'string' && new Date(incoming).getTime() === stored.getTime();
+    return (
+      typeof incoming === "string" &&
+      new Date(incoming).getTime() === stored.getTime()
+    );
   }
   if (incoming === null || stored === null) return incoming === stored;
   return String(incoming) === String(stored);
 }
 
 ownerRouter.get(
-  '/competition-settings',
+  "/competition-settings",
   asyncHandler(async (_req, res) => {
     const settings = await getSettings();
     res.json({
@@ -409,7 +447,7 @@ ownerRouter.get(
 );
 
 ownerRouter.put(
-  '/competition-settings',
+  "/competition-settings",
   asyncHandler(async (req, res) => {
     const body = settingsSchema.parse(req.body);
     const before = await getSettings();
@@ -420,20 +458,24 @@ ownerRouter.put(
       );
       if (attempted.length) {
         throw forbidden(
-          `Submissions have opened, so these cannot be changed: ${attempted.join(', ')}. Pause submissions first if this is an emergency.`,
+          `Submissions have opened, so these cannot be changed: ${attempted.join(", ")}. Pause submissions first if this is an emergency.`,
         );
       }
     }
 
     // A date can be cleared by sending null, so "absent" and "null" must stay
     // distinguishable all the way into the UPDATE.
-    const setsOpens = 'submission_opens_at' in body;
-    const setsCloses = 'submission_closes_at' in body;
-    const opensAt = setsOpens ? (body.submission_opens_at ?? null) : before.submission_opens_at;
-    const closesAt = setsCloses ? (body.submission_closes_at ?? null) : before.submission_closes_at;
+    const setsOpens = "submission_opens_at" in body;
+    const setsCloses = "submission_closes_at" in body;
+    const opensAt = setsOpens
+      ? (body.submission_opens_at ?? null)
+      : before.submission_opens_at;
+    const closesAt = setsCloses
+      ? (body.submission_closes_at ?? null)
+      : before.submission_closes_at;
 
     if (opensAt && closesAt && new Date(closesAt) <= new Date(opensAt)) {
-      throw badRequest('The closing date must be after the opening date.');
+      throw badRequest("The closing date must be after the opening date.");
     }
 
     const updated = await queryOne(
@@ -471,11 +513,14 @@ ownerRouter.put(
       ],
     );
 
-    const changes = diff(before as unknown as Record<string, unknown>, body as Record<string, unknown>);
+    const changes = diff(
+      before as unknown as Record<string, unknown>,
+      body as Record<string, unknown>,
+    );
     if (changes) {
       await recordAudit(req, {
         action: AuditAction.COMPETITION_SETTINGS_CHANGED,
-        entityType: 'competition_settings',
+        entityType: "competition_settings",
         oldValue: changes.old,
         newValue: changes.new,
       });
@@ -490,24 +535,27 @@ ownerRouter.put(
 // ---------------------------------------------------------------------------
 
 ownerRouter.get(
-  '/houses',
+  "/houses",
   asyncHandler(async (_req, res) => {
     res.json({ houses: await listHouses(false) });
   }),
 );
 
 ownerRouter.post(
-  '/houses',
+  "/houses",
   asyncHandler(async (req, res) => {
     const body = z
       .object({
-        name: z.string().trim().min(1, 'Enter a house name.').max(60),
+        name: z.string().trim().min(1, "Enter a house name.").max(60),
         sortOrder: z.number().int().min(0).max(999).default(0),
       })
       .parse(req.body);
 
-    const existing = await queryOne(`SELECT id FROM houses WHERE lower(name) = lower($1)`, [body.name]);
-    if (existing) throw conflict('A house with that name already exists.');
+    const existing = await queryOne(
+      `SELECT id FROM houses WHERE lower(name) = lower($1)`,
+      [body.name],
+    );
+    if (existing) throw conflict("A house with that name already exists.");
 
     const created = await queryOne<HouseRow>(
       `INSERT INTO houses (name, sort_order) VALUES ($1, $2)
@@ -516,7 +564,7 @@ ownerRouter.post(
     );
     await recordAudit(req, {
       action: AuditAction.HOUSE_CHANGED,
-      entityType: 'house',
+      entityType: "house",
       entityId: created!.id,
       newValue: { name: body.name, created: true },
     });
@@ -525,7 +573,7 @@ ownerRouter.post(
 );
 
 ownerRouter.patch(
-  '/houses/:id',
+  "/houses/:id",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const body = z
@@ -540,7 +588,7 @@ ownerRouter.patch(
       `SELECT id, name, active, sort_order FROM houses WHERE id = $1`,
       [id],
     );
-    if (!before) throw notFound('That house no longer exists.');
+    if (!before) throw notFound("That house no longer exists.");
 
     const updated = await queryOne<HouseRow>(
       `UPDATE houses SET name = COALESCE($2, name), active = COALESCE($3, active),
@@ -551,7 +599,7 @@ ownerRouter.patch(
 
     await recordAudit(req, {
       action: AuditAction.HOUSE_CHANGED,
-      entityType: 'house',
+      entityType: "house",
       entityId: id,
       oldValue: before,
       newValue: updated,
@@ -561,7 +609,7 @@ ownerRouter.patch(
 );
 
 ownerRouter.delete(
-  '/houses/:id',
+  "/houses/:id",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const inUse = await queryOne<{ count: string }>(
@@ -570,16 +618,19 @@ ownerRouter.delete(
     );
     if (Number(inUse?.count ?? 0) > 0) {
       throw conflict(
-        'Entries already use this house. Turn it off instead of deleting so existing entries keep their house.',
+        "Entries already use this house. Turn it off instead of deleting so existing entries keep their house.",
       );
     }
-    const before = await queryOne<HouseRow>(`SELECT id, name FROM houses WHERE id = $1`, [id]);
-    if (!before) throw notFound('That house no longer exists.');
+    const before = await queryOne<HouseRow>(
+      `SELECT id, name FROM houses WHERE id = $1`,
+      [id],
+    );
+    if (!before) throw notFound("That house no longer exists.");
 
     await query(`DELETE FROM houses WHERE id = $1`, [id]);
     await recordAudit(req, {
       action: AuditAction.HOUSE_CHANGED,
-      entityType: 'house',
+      entityType: "house",
       entityId: id,
       oldValue: before,
       newValue: { deleted: true },
@@ -589,28 +640,29 @@ ownerRouter.delete(
 );
 
 ownerRouter.get(
-  '/categories',
+  "/categories",
   asyncHandler(async (_req, res) => {
     res.json({ categories: await listCategories(false) });
   }),
 );
 
 ownerRouter.post(
-  '/categories',
+  "/categories",
   asyncHandler(async (req, res) => {
     const body = z
       .object({
-        name: z.string().trim().min(1, 'Enter a category name.').max(80),
-        description: z.string().trim().max(1000).default(''),
-        requirements: z.string().trim().max(2000).default(''),
+        name: z.string().trim().min(1, "Enter a category name.").max(80),
+        description: z.string().trim().max(1000).default(""),
+        requirements: z.string().trim().max(2000).default(""),
         sortOrder: z.number().int().min(0).max(999).default(0),
       })
       .parse(req.body);
 
-    const existing = await queryOne(`SELECT id FROM categories WHERE lower(name) = lower($1)`, [
-      body.name,
-    ]);
-    if (existing) throw conflict('A category with that name already exists.');
+    const existing = await queryOne(
+      `SELECT id FROM categories WHERE lower(name) = lower($1)`,
+      [body.name],
+    );
+    if (existing) throw conflict("A category with that name already exists.");
 
     const created = await queryOne<CategoryRow>(
       `INSERT INTO categories (name, description, requirements, sort_order)
@@ -620,7 +672,7 @@ ownerRouter.post(
     );
     await recordAudit(req, {
       action: AuditAction.CATEGORY_CHANGED,
-      entityType: 'category',
+      entityType: "category",
       entityId: created!.id,
       newValue: { name: body.name, created: true },
     });
@@ -629,7 +681,7 @@ ownerRouter.post(
 );
 
 ownerRouter.patch(
-  '/categories/:id',
+  "/categories/:id",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const body = z
@@ -646,7 +698,7 @@ ownerRouter.patch(
       `SELECT id, name, description, requirements, active, sort_order FROM categories WHERE id = $1`,
       [id],
     );
-    if (!before) throw notFound('That category no longer exists.');
+    if (!before) throw notFound("That category no longer exists.");
 
     const updated = await queryOne<CategoryRow>(
       `UPDATE categories SET name = COALESCE($2, name),
@@ -668,7 +720,7 @@ ownerRouter.patch(
 
     await recordAudit(req, {
       action: AuditAction.CATEGORY_CHANGED,
-      entityType: 'category',
+      entityType: "category",
       entityId: id,
       oldValue: before,
       newValue: updated,
@@ -678,7 +730,7 @@ ownerRouter.patch(
 );
 
 ownerRouter.delete(
-  '/categories/:id',
+  "/categories/:id",
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const inUse = await queryOne<{ count: string }>(
@@ -686,15 +738,20 @@ ownerRouter.delete(
       [id],
     );
     if (Number(inUse?.count ?? 0) > 0) {
-      throw conflict('Entries already use this category. Turn it off instead of deleting it.');
+      throw conflict(
+        "Entries already use this category. Turn it off instead of deleting it.",
+      );
     }
-    const before = await queryOne<CategoryRow>(`SELECT id, name FROM categories WHERE id = $1`, [id]);
-    if (!before) throw notFound('That category no longer exists.');
+    const before = await queryOne<CategoryRow>(
+      `SELECT id, name FROM categories WHERE id = $1`,
+      [id],
+    );
+    if (!before) throw notFound("That category no longer exists.");
 
     await query(`DELETE FROM categories WHERE id = $1`, [id]);
     await recordAudit(req, {
       action: AuditAction.CATEGORY_CHANGED,
-      entityType: 'category',
+      entityType: "category",
       entityId: id,
       oldValue: before,
       newValue: { deleted: true },
@@ -708,7 +765,7 @@ ownerRouter.delete(
 // ---------------------------------------------------------------------------
 
 ownerRouter.get(
-  '/audit-logs',
+  "/audit-logs",
   asyncHandler(async (req, res) => {
     const { actor, action, from, to, page, pageSize } = z
       .object({
@@ -741,7 +798,7 @@ ownerRouter.get(
       conditions.push(`created_at <= $${params.length}::timestamptz`);
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const [countRow] = await query<{ count: string }>(
       `SELECT count(*) FROM audit_logs ${where}`,
       params,
@@ -757,6 +814,11 @@ ownerRouter.get(
       params,
     );
 
-    res.json({ logs: rows, page, pageSize, total: Number(countRow?.count ?? 0) });
+    res.json({
+      logs: rows,
+      page,
+      pageSize,
+      total: Number(countRow?.count ?? 0),
+    });
   }),
 );
