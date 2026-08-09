@@ -373,8 +373,12 @@ adminRouter.post(
   }),
 );
 
+// Changing a student's own words, or the photo they are judged on, alters the
+// entry rather than reviewing it, so both are Owner-only alongside deletion.
+// An Admin reviews: approve, reject, lock, reopen.
 adminRouter.patch(
   '/submissions/:id',
+  requireRole('owner'),
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
     const body = z
@@ -434,6 +438,7 @@ adminRouter.patch(
 
 adminRouter.put(
   '/submissions/:id/photo',
+  requireRole('owner'),
   upload.single('photo'),
   asyncHandler(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id);
@@ -478,9 +483,6 @@ adminRouter.put(
   }),
 );
 
-// Deletion destroys the photo as well as the row, so it is the one review
-// action an Admin cannot take: a compromised or careless Admin account can
-// reject and lock entries, but cannot erase them.
 adminRouter.delete(
   '/submissions/:id',
   requireRole('owner'),

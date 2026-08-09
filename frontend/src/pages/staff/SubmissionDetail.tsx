@@ -28,7 +28,8 @@ export function StaffSubmissionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canDelete = user?.role === "owner";
+  // Reviewing an entry is an Admin job; altering or removing one is not.
+  const isOwner = user?.role === "owner";
 
   const [submission, setSubmission] = useState<AdminSubmissionDetail | null>(
     null,
@@ -282,9 +283,17 @@ export function StaffSubmissionDetail() {
                   </>
                 ) : null}
               </dl>
-              <Button variant="secondary" onClick={() => setEditing(true)}>
-                Edit details
-              </Button>
+              {isOwner ? (
+                <Button variant="secondary" onClick={() => setEditing(true)}>
+                  Edit details
+                </Button>
+              ) : (
+                <p className="muted small">
+                  Only the Owner can change what a student wrote. If something
+                  here is wrong, reject the entry with a yellow reason and the
+                  student can correct it themselves.
+                </p>
+              )}
             </>
           )}
         </Card>
@@ -300,38 +309,48 @@ export function StaffSubmissionDetail() {
             {fileSize(submission.image.bytes)}
           </p>
 
-          <Field
-            label="Replace photo"
-            htmlFor="replacement"
-            hint="Use only to fix an unusable image."
-          >
-            <input
-              id="replacement"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) =>
-                setReplacement(event.target.files?.[0] ?? null)
-              }
-            />
-          </Field>
-          <Button
-            variant="secondary"
-            disabled={!replacement || busy}
-            onClick={() =>
-              run(async () => {
-                const form = new FormData();
-                form.append("photo", replacement as File);
-                await api.upload(
-                  `/api/admin/submissions/${submission.id}/photo`,
-                  form,
-                  "PUT",
-                );
-                setReplacement(null);
-              }, "Photo replaced. The previous photo is kept in the history.")
-            }
-          >
-            Replace photo
-          </Button>
+          {isOwner ? (
+            <>
+              <Field
+                label="Replace photo"
+                htmlFor="replacement"
+                hint="Use only to fix an unusable image."
+              >
+                <input
+                  id="replacement"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) =>
+                    setReplacement(event.target.files?.[0] ?? null)
+                  }
+                />
+              </Field>
+              <Button
+                variant="secondary"
+                disabled={!replacement || busy}
+                onClick={() =>
+                  run(async () => {
+                    const form = new FormData();
+                    form.append("photo", replacement as File);
+                    await api.upload(
+                      `/api/admin/submissions/${submission.id}/photo`,
+                      form,
+                      "PUT",
+                    );
+                    setReplacement(null);
+                  }, "Photo replaced. The previous photo is kept in the history.")
+                }
+              >
+                Replace photo
+              </Button>
+            </>
+          ) : (
+            <p className="muted small">
+              Only the Owner can replace a student's photo. If this one is
+              unusable, reject the entry with a yellow reason and ask the
+              student for a better photo.
+            </p>
+          )}
 
           {submission.previousPhotos.length > 0 ? (
             <div style={{ marginTop: "1rem" }}>
@@ -553,7 +572,7 @@ export function StaffSubmissionDetail() {
       ) : null}
 
       <Card title="Remove entry">
-        {canDelete ? (
+        {isOwner ? (
           <>
             <p className="muted small">
               Deleting removes the entry and its photos permanently and cannot

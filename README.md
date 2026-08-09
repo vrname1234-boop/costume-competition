@@ -29,8 +29,8 @@ they are kept apart and how a tested change is published to the real site.
 | Submit one entry | Yes | No | No |
 | Edit own entry before the deadline | Yes | No | No |
 | See all entries, search, filter, export CSV | No | Yes | Yes |
-| Approve / reject with a reason | No | Yes | Yes |
-| Edit entry details, replace or delete a photo | No | Yes | Yes |
+| Approve / reject with a reason, lock and reopen | No | Yes | Yes |
+| Edit entry details, replace the photo, delete an entry | No | No | Yes |
 | Edit website text, rules, dress code, announcements | No | No | Yes |
 | Competition dates, categories, houses, upload limits | No | No | Yes |
 | Create / disable / delete admin accounts | No | No | Yes |
