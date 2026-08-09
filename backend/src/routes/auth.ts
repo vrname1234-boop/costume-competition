@@ -57,9 +57,11 @@ const GENERIC_SENT = {
 };
 
 /**
- * Wording the user asked for verbatim. Students are turned away after their
- * credentials are checked, so the block is decided by the account's role on
- * the server rather than by anything the browser sends.
+ * Signing in is left open to everyone during maintenance: a student who does
+ * simply lands on the maintenance notice, because the student API is closed.
+ * What is refused is anything that changes an account - creating one, or
+ * resetting a password - decided from the role held on the server rather than
+ * from anything the browser sends.
  */
 const MAINTENANCE_STUDENT = "Student access is unavailable during maintenance.";
 
@@ -318,8 +320,6 @@ authRouter.post(
       throw failure;
     }
 
-    await assertStudentAllowed(user.role);
-
     await query(
       `UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = now() WHERE id = $1`,
       [user.id],
@@ -461,6 +461,7 @@ authRouter.post(
       req.user!.id,
     ]);
     if (!user?.password_hash) throw unauthorized();
+    await assertStudentAllowed(user.role);
 
     if (!(await verifyPassword(user.password_hash, currentPassword))) {
       throw badRequest("Your current password is not correct.");

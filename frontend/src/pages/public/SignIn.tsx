@@ -56,8 +56,9 @@ export function SignIn() {
 
       {maintenance ? (
         <Banner tone="warn">
-          The site is closed for maintenance. Student sign in is unavailable
-          until it reopens. Staff and Owner accounts can still sign in.
+          The site is closed for maintenance. Students can still sign in, but
+          new accounts, password resets and the entry area are unavailable until
+          it reopens. Staff and Owner accounts are unaffected.
         </Banner>
       ) : null}
 
