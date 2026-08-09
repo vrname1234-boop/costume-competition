@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { RequireRole } from "./auth/RequireRole";
 import { Layout } from "./components/Layout";
+import { MaintenanceNotice } from "./components/MaintenanceNotice";
 import { Banner, Card } from "./components/ui";
 import { ChangePassword } from "./pages/ChangePassword";
 import { OwnerAdmins } from "./pages/owner/Admins";
@@ -53,16 +54,7 @@ function MaintenanceWatcher() {
 
   return (
     <>
-      {seconds === null ? null : (
-        <Banner tone="warn">
-          <strong>Maintenance mode is starting in {seconds} seconds.</strong>
-          <br />
-          Please don&apos;t start any new submissions, uploads, or edits while
-          maintenance is starting. If you&apos;re currently working on
-          something, please wait until maintenance is complete before
-          continuing.
-        </Banner>
-      )}
+      {seconds === null ? null : <MaintenanceNotice seconds={seconds} />}
       <Outlet />
     </>
   );
