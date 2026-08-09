@@ -37,9 +37,35 @@ function Maintenance({ message }: { message: string }) {
       <h1>Temporarily unavailable</h1>
       <Banner tone="warn">
         {message ||
-          "The competition site is closed while we make updates. Please check back later."}
+          "The competition is temporarily unavailable while maintenance is in progress."}
       </Banner>
+      <p className="muted">
+        Student access will return as soon as maintenance is finished. Anything
+        you have already submitted is safe.
+      </p>
     </Card>
+  );
+}
+
+/**
+ * Pages that staff also use: only a student session is replaced with the
+ * maintenance notice, so the Owner can still change their own password while
+ * working on the site.
+ */
+function StudentLocked({
+  maintenance,
+  message,
+  children,
+}: {
+  maintenance: boolean;
+  message: string;
+  children: ReactElement;
+}) {
+  const { user } = useAuth();
+  return maintenance && user?.role === "student" ? (
+    <Maintenance message={message} />
+  ) : (
+    children
   );
 }
 
@@ -69,6 +95,9 @@ export default function App() {
     "Costume Competition";
 
   const maintenance = site?.content.maintenance_mode === true;
+  const maintenanceMessage = site
+    ? text(site.content, "maintenance_message")
+    : "";
 
   /**
    * While maintenance is on, every student-facing page becomes the maintenance
@@ -77,7 +106,7 @@ export default function App() {
    */
   const studentPage = (element: ReactElement) =>
     maintenance && site ? (
-      <Maintenance message={text(site.content, "maintenance_message")} />
+      <Maintenance message={maintenanceMessage} />
     ) : (
       element
     );
@@ -90,6 +119,7 @@ export default function App() {
             <Layout
               competitionName={competitionName}
               environment={site?.environment ?? null}
+              maintenance={maintenance}
             />
           }
         >
@@ -103,7 +133,12 @@ export default function App() {
               path="change-password"
               element={
                 <RequireRole roles={["student", "admin", "owner"]}>
-                  <ChangePassword />
+                  <StudentLocked
+                    maintenance={maintenance}
+                    message={maintenanceMessage}
+                  >
+                    <ChangePassword />
+                  </StudentLocked>
                 </RequireRole>
               }
             />
